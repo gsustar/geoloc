@@ -1,0 +1,19 @@
+downloader:
+  tiles_dir: "/storage/datasets/AerialLoc/Drone2Sat/LjubljanaSat/{download_endpoint}/tiles"
+  download_endpoint: "arcgis" # ges or arcgis or mapbox
+  arcgis:
+    arcgis_available_maps_endpoint: "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/WMTS/1.0.0/WMTSCapabilities.xml"
+    endpoints_filter:
+      - "2025"
+      - "2024"
+      - "2022"
+      - "2021"
+  mapbox:
+    mapbox_endpoint: "https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}.jpg?access_token={mapbox_access_token}"
+    mapbox_access_token: "pk.eyJ1IjoiZGFzcGVjc3RlciIsImEiOiJjaWxrOXp0eHo1aWp2dXRtMHJkcjNweTgxIn0.Ms61OFsymP8PvdHSykLNcw"
+  ges:
+    ges_endpoint: "http://mts0.googleapis.com/vt?lyrs=s&x={x}&y={y}&z={z}"
+  uav_dataset_dir: "/home/spanskiduh/Nextcloud/RESEARCH-FRI/UAV-LOC-DATASET/"
+  dataset: "region" #UAV_LOC or GES or region
+  sat_zoom_level: 19
+  regions_filepath: "/storage/datasets/AerialLoc/Drone2Sat/LjubljanaSat/LJ_10x10km.geojson"
