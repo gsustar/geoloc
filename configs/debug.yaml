@@ -1,0 +1,36 @@
+ROTREF_EXP: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/debug/VPAir/debug
+
+anyloc:
+  class_path: geoloc.relatedwork.anyloc.AnyLoc
+  init_args:
+    backbone:
+      class_path: geoloc.models.backbones.AnyLocDINOv2Backbone
+      init_args:
+        model_name: dinov2_vitg14
+        facet: value
+        layer: 31
+    vlad:
+      _fit_step: 10
+      _use_prefitted: True
+      class_path: geoloc.models.aggregators.vlad.VLAD
+      init_args:
+        num_clusters: 32
+        vlad_mode: hard
+        desc_dim: 1536
+        cache_dir: *savedir
+
+dataset:
+  # class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    include_distractors: True
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 49152
+    distfn: cosine
+    norm_vec: True

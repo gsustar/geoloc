@@ -1,0 +1,12 @@
+VISUALIZE_TOP_K: True
+
+every_n: 1
+benchmark_top_k: [1, 5, 10, 25, 50, 100]
+
+dataset:
+  # class_path: geoloc.data.datasets.VPAir.VPAirQueryImages
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetQueryImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    soft_positive_offset: 3
+    resize: [512, 512]

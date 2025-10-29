@@ -1,0 +1,35 @@
+ROTREF_EXP: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/anyloc/ALTO/paper
+
+anyloc:
+  class_path: geoloc.relatedwork.anyloc.AnyLoc
+  init_args:
+    backbone:
+      class_path: geoloc.models.backbones.AnyLocDINOv2Backbone
+      init_args:
+        facet: value
+        layer: 31
+    vlad:
+      _fit_step: 10
+      _use_prefitted: True
+      class_path: geoloc.models.aggregators.vlad.VLAD
+      init_args:
+        num_clusters: 32
+        vlad_mode: hard
+        desc_dim: 1536
+        cache_dir: *savedir
+
+dataset:
+  class_path: geoloc.data.datasets.ALTO.ALTOReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/ALTO
+    round: 1
+    split: Val
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 49152
+    distfn: cosine
+    norm_vec: True
