@@ -3,6 +3,7 @@ datamodule:
     class_path: geoloc.data.datasets.VPAir.VPAirTrainDataset
     init_args:
       root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+      north_align: True
       resize: 504
   dataloader:
     batch_size: 8

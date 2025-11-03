@@ -1,4 +1,4 @@
-# CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/anyloc/benchmark_anyloc.py --dataset VPAir
+# CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/anyloc/build_benchmark_anyloc.py --dataset VPAir
 
 import os
 import argparse

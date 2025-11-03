@@ -26,9 +26,10 @@ def _load_reference_views(root):
 		os.path.join(root, "reference_views")
 	)
 
-def _load_queries(root):
+def _load_queries(root, north_aligned=False):
+	querydir = "queries_north_aligned" if north_aligned else "queries"
 	return get_sorted_imgpaths(
-		os.path.join(root, "queries")
+		os.path.join(root, querydir)
 	)
 
 def _load_gt_pos(root):
@@ -91,11 +92,12 @@ class VPAirReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
 class VPAirQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
-	def __init__(self, root: str, soft_positive_offset: int = 3, resize=None, center_crop=None):
+	def __init__(self, root: str, soft_positive_offset: int = 3, north_align=False, resize=None, center_crop=None):
 		super().__init__(resize=resize, center_crop=center_crop)
 		self.root = root
 		self.crs = "EPSG:4326"
-		self.queries = _load_queries(root)
+		self.north_align = north_align
+		self.queries = _load_queries(root, north_aligned=north_align)
 		self.poses = _load_poses(root)
 		# self.gt_pos = _load_gt_pos(root)
 		self.soft_positive_offset = soft_positive_offset
@@ -134,13 +136,14 @@ VPAIR_TRAIN_TEST_SPLIT = 0.7
 class VPAirTrainDataset(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
 	def __init__(
- 		self, root: str, resize=None, center_crop=None
+ 		self, root: str, north_align: bool = False, resize=None, center_crop=None
 	):
 		super().__init__(resize=resize, center_crop=center_crop)
 		self.root = root
 		self.crs = "EPSG:4326"
+		self.north_align = north_align
 
-		self.queries = _load_queries(root)
+		self.queries = _load_queries(root, north_aligned=north_align)
 		self.reference_views = _load_reference_views(root)
 
 		train_cut = int(np.floor(len(self.queries) * VPAIR_TRAIN_TEST_SPLIT))
@@ -182,10 +185,11 @@ class VPAirTestDatasetQueryImages(VPAirQueryImages):
  		self, 
 		root: str, 
 		soft_positive_offset: int = 3, 
+		north_align=False,
 		resize=None, 
 		center_crop=None
 	):
-		super().__init__(root=root, soft_positive_offset=soft_positive_offset, resize=resize, center_crop=center_crop)
+		super().__init__(root=root, soft_positive_offset=soft_positive_offset, north_align=north_align, resize=resize, center_crop=center_crop)
 		train_cut = int(np.floor(len(self.queries) * VPAIR_TRAIN_TEST_SPLIT))
 		self.queries = self.queries[train_cut:]
 		self.poses = self.poses.iloc[train_cut:].reset_index(drop=True)

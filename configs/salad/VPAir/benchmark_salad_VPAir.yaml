@@ -10,3 +10,4 @@ dataset:
     root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
     soft_positive_offset: 3
     resize: 504
+    north_align: True

@@ -4,7 +4,7 @@ savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/salad/VPAir/paper_w
 
 salad:
   class_path: geoloc.relatedwork.salad.SALADModel
-  checkpoint: /home/grega/geoloc/logs/lightning_logs/version_0/checkpoints/epoch=5-step=1416.ckpt
+  checkpoint: /home/grega/geoloc/logs/lightning_logs/version_2/checkpoints/epoch=9-step=2360.ckpt
 
 dataset:
   #class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages

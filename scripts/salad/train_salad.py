@@ -3,7 +3,7 @@ import lightning as L
 
 from geoloc.config_parser import load_config
 from geoloc.data.train_datamodule import TrainingDataModule
-from geoloc.geoloc.relatedwork.salad import SALADModel
+from geoloc.relatedwork.salad import SALADModel
 
 
 def create_argparse():
