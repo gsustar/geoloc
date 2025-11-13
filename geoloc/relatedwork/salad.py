@@ -1,5 +1,6 @@
 import lightning as L
 import torch
+
 # from torch.optim import lr_scheduler, optimizer
 from torch.optim import lr_scheduler
 
@@ -11,8 +12,12 @@ from ..models.vprmodel import VPRModel
 
 
 class SALADModel(VPRModel):
-	def __init__(self, **kwargs):
-		super().__init__(**kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def load_pretrained(self, ckpt_path: str):
+        self.load_state_dict(torch.load(ckpt_path), strict=True)
+
 
 # def get_loss(loss_name):
 # 	from pytorch_metric_learning import losses
@@ -42,7 +47,6 @@ class SALADModel(VPRModel):
 # 	return None
 
 
-
 # class SALADModel(L.LightningModule):
 # 	"""This is the main model for Visual Place Recognition
 # 	we use Pytorch Lightning for modularity purposes.
@@ -63,7 +67,7 @@ class SALADModel(VPRModel):
 # 		cluster_dim=128,
 # 		token_dim=256,
 # 		#---- Train hyperparameters
-# 		lr=6e-5, 
+# 		lr=6e-5,
 # 		optimizer='adamw',
 # 		weight_decay=9.5e-9,
 # 		momentum=0.9,
@@ -73,10 +77,10 @@ class SALADModel(VPRModel):
 # 			'end_factor': 0.2,
 # 			'total_iters': 4000,
 # 		},
-		
+
 # 		#----- Loss
-# 		loss_name='MultiSimilarityLoss', 
-# 		miner_name='MultiSimilarityMiner', 
+# 		loss_name='MultiSimilarityLoss',
+# 		miner_name='MultiSimilarityMiner',
 # 		miner_margin=0.1,
 # 		faiss_gpu=False
 # 	):
@@ -105,15 +109,15 @@ class SALADModel(VPRModel):
 # 		self.loss_name = loss_name
 # 		self.miner_name = miner_name
 # 		self.miner_margin = miner_margin
-		
+
 # 		self.save_hyperparameters() # write hyperparams into a file
-		
+
 # 		self.loss_fn = get_loss(loss_name)
 # 		self.miner = get_miner(miner_name, miner_margin)
-# 		self.batch_acc = [] # we will keep track of the % of trivial pairs/triplets at the loss level 
+# 		self.batch_acc = [] # we will keep track of the % of trivial pairs/triplets at the loss level
 
 # 		self.faiss_gpu = faiss_gpu
-		
+
 # 		self.backbone = SaladDINOv2Backbone(
 # 			model_name=self.model_name,
 # 			num_trainable_blocks=self.num_trainable_blocks,
@@ -129,37 +133,37 @@ class SALADModel(VPRModel):
 
 # 		# For validation in Lightning v2.0.0
 # 		self.val_outputs = []
-		
+
 # 	# the forward pass of the lightning model
 # 	def forward(self, x):
 # 		x = self.backbone(x)
 # 		x = self.aggregator(x)
 # 		return x
-	
-# 	# configure the optimizer 
+
+# 	# configure the optimizer
 # 	def configure_optimizers(self):
 # 		if self.optimizer.lower() == 'sgd':
 # 			optimizer = torch.optim.SGD(
-# 				self.parameters(), 
-# 				lr=self.lr, 
-# 				weight_decay=self.weight_decay, 
+# 				self.parameters(),
+# 				lr=self.lr,
+# 				weight_decay=self.weight_decay,
 # 				momentum=self.momentum
 # 			)
 # 		elif self.optimizer.lower() == 'adamw':
 # 			optimizer = torch.optim.AdamW(
-# 				self.parameters(), 
-# 				lr=self.lr, 
+# 				self.parameters(),
+# 				lr=self.lr,
 # 				weight_decay=self.weight_decay
 # 			)
 # 		elif self.optimizer.lower() == 'adam':
 # 			optimizer = torch.optim.AdamW(
-# 				self.parameters(), 
-# 				lr=self.lr, 
+# 				self.parameters(),
+# 				lr=self.lr,
 # 				weight_decay=self.weight_decay
 # 			)
 # 		else:
 # 			raise ValueError(f'Optimizer {self.optimizer} has not been added to "configure_optimizers()"')
-		
+
 
 # 		if self.lr_sched.lower() == 'multistep':
 # 			# scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=self.lr_sched_args['milestones'], gamma=self.lr_sched_args['gamma'])
@@ -179,21 +183,21 @@ class SALADModel(VPRModel):
 # 			)
 
 # 		return [optimizer], [scheduler]
-	
+
 # 	# configure the optizer step, takes into account the warmup stage
 # 	def optimizer_step(self,  epoch, batch_idx, optimizer, optimizer_closure):
 # 		# warm up lr
 # 		optimizer.step(closure=optimizer_closure)
 # 		self.lr_schedulers().step()
-		
+
 # 	#  The loss function call (this method will be called at each training iteration)
 # 	def loss_function(self, descriptors, labels):
 # 		# we mine the pairs/triplets if there is an online mining strategy
 # 		if self.miner is not None:
 # 			miner_outputs = self.miner(descriptors, labels)
 # 			loss = self.loss_fn(descriptors, labels, miner_outputs)
-			
-# 			# calculate the % of trivial pairs/triplets 
+
+# 			# calculate the % of trivial pairs/triplets
 # 			# which do not contribute in the loss value
 # 			nb_samples = descriptors.shape[0]
 # 			nb_mined = len(set(miner_outputs[0].detach().cpu().numpy()))
@@ -202,11 +206,11 @@ class SALADModel(VPRModel):
 # 		else: # no online mining
 # 			loss = self.loss_fn(descriptors, labels)
 # 			batch_acc = 0.0
-# 			if type(loss) == tuple: 
-# 				# somes losses do the online mining inside (they don't need a miner objet), 
+# 			if type(loss) == tuple:
+# 				# somes losses do the online mining inside (they don't need a miner objet),
 # 				# so they return the loss and the batch accuracy
 # 				# for example, if you are developping a new loss function, you might be better
-# 				# doing the online mining strategy inside the forward function of the loss class, 
+# 				# doing the online mining strategy inside the forward function of the loss class,
 # 				# and return a tuple containing the loss value and the batch_accuracy (the % of valid pairs or triplets)
 # 				loss, batch_acc = loss
 
@@ -216,7 +220,7 @@ class SALADModel(VPRModel):
 # 		self.log('b_acc', sum(self.batch_acc) /
 # 				len(self.batch_acc), prog_bar=True, logger=True)
 # 		return loss
-	
+
 # 	# This is the training step that's executed at each iteration
 # 	def training_step(self, batch, batch_idx):
 # 		imgs = batch["images"]
@@ -231,10 +235,10 @@ class SALADModel(VPRModel):
 # 			raise ValueError('NaNs in descriptors')
 
 # 		loss = self.loss_function(descriptors, labels) # Call the loss_function we defined above
-		
+
 # 		self.log('loss', loss.item(), logger=True, prog_bar=True)
 # 		return {'loss': loss}
-	
+
 # 	def on_train_epoch_end(self):
 # 		# we empty the batch_acc list for next epoch
 # 		self.batch_acc = []
@@ -246,14 +250,14 @@ class SALADModel(VPRModel):
 # 	#     descriptors = self(places)
 # 	#     self.val_outputs[dataloader_idx].append(descriptors.detach().cpu())
 # 	#     return descriptors.detach().cpu()
-	
+
 # 	# def on_validation_epoch_start(self):
 # 	#     # reset the outputs list
 # 	#     self.val_outputs = [[] for _ in range(len(self.trainer.datamodule.val_datasets))]
-	
+
 # 	# def on_validation_epoch_end(self):
 # 	#     """this return descriptors in their order
-# 	#     depending on how the validation dataset is implemented 
+# 	#     depending on how the validation dataset is implemented
 # 	#     for this project (MSLS val, Pittburg val), it is always references then queries
 # 	#     [R1, R2, ..., Rn, Q1, Q2, ...]
 # 	#     """
@@ -264,10 +268,10 @@ class SALADModel(VPRModel):
 # 	#     # we need to put the outputs in a list (Pytorch Lightning does not do it presently)
 # 	#     if len(dm.val_datasets)==1: # we need to put the outputs in a list
 # 	#         val_step_outputs = [val_step_outputs]
-		
+
 # 	#     for i, (val_set_name, val_dataset) in enumerate(zip(dm.val_set_names, dm.val_datasets)):
 # 	#         feats = torch.concat(val_step_outputs[i], dim=0)
-			
+
 # 	#         if 'pitts' in val_set_name:
 # 	#             # split to ref and queries
 # 	#             num_references = val_dataset.dbStruct.numDb
@@ -283,7 +287,7 @@ class SALADModel(VPRModel):
 # 	#         r_list = feats[ : num_references]
 # 	#         q_list = feats[num_references : ]
 # 	#         pitts_dict = utils.get_validation_recalls(
-# 	#             r_list=r_list, 
+# 	#             r_list=r_list,
 # 	#             q_list=q_list,
 # 	#             k_values=[1, 5, 10, 15, 20, 50, 100],
 # 	#             gt=positives,

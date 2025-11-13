@@ -3,9 +3,11 @@ from ..models.aggregators.mixvpr import MixVPR
 from ..models.backbones import MixVPRResNetBackbone
 from ..models.vprmodel import VPRModel
 
+
 class MixVPRModel(VPRModel):
-	def __init__(self, **kwargs):
-		super().__init__(**kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
 
 # class MixVPRModel(L.LightningModule):
 # 	"""This is the main model for Visual Place Recognition
@@ -21,23 +23,23 @@ class MixVPRModel(VPRModel):
 # 				pretrained=True,
 # 				layers_to_freeze=1,
 # 				layers_to_crop=[],
-				
+
 # 				#---- Aggregator
 # 				agg_arch='ConvAP', #CosPlace, NetVLAD, GeM
 # 				agg_config={},
-				
+
 # 				#---- Train hyperparameters
-# 				lr=0.03, 
+# 				lr=0.03,
 # 				optimizer='sgd',
 # 				weight_decay=1e-3,
 # 				momentum=0.9,
 # 				warmpup_steps=500,
 # 				milestones=[5, 10, 15],
 # 				lr_mult=0.3,
-				
+
 # 				#----- Loss
-# 				loss_name='MultiSimilarityLoss', 
-# 				miner_name='MultiSimilarityMiner', 
+# 				loss_name='MultiSimilarityLoss',
+# 				miner_name='MultiSimilarityMiner',
 # 				miner_margin=0.1,
 # 				faiss_gpu=False
 # 				):
@@ -61,46 +63,46 @@ class MixVPRModel(VPRModel):
 # 		self.loss_name = loss_name
 # 		self.miner_name = miner_name
 # 		self.miner_margin = miner_margin
-		
+
 # 		self.save_hyperparameters() # write hyperparams into a file
-		
+
 # 		self.loss_fn = utils.get_loss(loss_name)
 # 		self.miner = utils.get_miner(miner_name, miner_margin)
-# 		self.batch_acc = [] # we will keep track of the % of trivial pairs/triplets at the loss level 
+# 		self.batch_acc = [] # we will keep track of the % of trivial pairs/triplets at the loss level
 
 # 		self.faiss_gpu = faiss_gpu
-		
+
 # 		# ----------------------------------
 # 		# get the backbone and the aggregator
 # 		self.backbone = helper.get_backbone(backbone_arch, pretrained, layers_to_freeze, layers_to_crop)
 # 		self.aggregator = helper.get_aggregator(agg_arch, agg_config)
-		
+
 # 	# the forward pass of the lightning model
 # 	def forward(self, x):
 # 		x = self.backbone(x)
 # 		x = self.aggregator(x)
 # 		return x
-	
-# 	# configure the optimizer 
+
+# 	# configure the optimizer
 # 	def configure_optimizers(self):
 # 		if self.optimizer.lower() == 'sgd':
-# 			optimizer = torch.optim.SGD(self.parameters(), 
-# 										lr=self.lr, 
-# 										weight_decay=self.weight_decay, 
+# 			optimizer = torch.optim.SGD(self.parameters(),
+# 										lr=self.lr,
+# 										weight_decay=self.weight_decay,
 # 										momentum=self.momentum)
 # 		elif self.optimizer.lower() == 'adamw':
-# 			optimizer = torch.optim.AdamW(self.parameters(), 
-# 										lr=self.lr, 
+# 			optimizer = torch.optim.AdamW(self.parameters(),
+# 										lr=self.lr,
 # 										weight_decay=self.weight_decay)
 # 		elif self.optimizer.lower() == 'adam':
-# 			optimizer = torch.optim.AdamW(self.parameters(), 
-# 										lr=self.lr, 
+# 			optimizer = torch.optim.AdamW(self.parameters(),
+# 										lr=self.lr,
 # 										weight_decay=self.weight_decay)
 # 		else:
 # 			raise ValueError(f'Optimizer {self.optimizer} has not been added to "configure_optimizers()"')
 # 		scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=self.milestones, gamma=self.lr_mult)
 # 		return [optimizer], [scheduler]
-	
+
 # 	# configure the optizer step, takes into account the warmup stage
 # 	def optimizer_step(self,  epoch, batch_idx,
 # 						optimizer, optimizer_idx, optimizer_closure,
@@ -111,15 +113,15 @@ class MixVPRModel(VPRModel):
 # 			for pg in optimizer.param_groups:
 # 				pg['lr'] = lr_scale * self.lr
 # 		optimizer.step(closure=optimizer_closure)
-		
+
 # 	#  The loss function call (this method will be called at each training iteration)
 # 	def loss_function(self, descriptors, labels):
 # 		# we mine the pairs/triplets if there is an online mining strategy
 # 		if self.miner is not None:
 # 			miner_outputs = self.miner(descriptors, labels)
 # 			loss = self.loss_fn(descriptors, labels, miner_outputs)
-			
-# 			# calculate the % of trivial pairs/triplets 
+
+# 			# calculate the % of trivial pairs/triplets
 # 			# which do not contribute in the loss value
 # 			nb_samples = descriptors.shape[0]
 # 			nb_mined = len(set(miner_outputs[0].detach().cpu().numpy()))
@@ -128,11 +130,11 @@ class MixVPRModel(VPRModel):
 # 		else: # no online mining
 # 			loss = self.loss_fn(descriptors, labels)
 # 			batch_acc = 0.0
-# 			if type(loss) == tuple: 
-# 				# somes losses do the online mining inside (they don't need a miner objet), 
+# 			if type(loss) == tuple:
+# 				# somes losses do the online mining inside (they don't need a miner objet),
 # 				# so they return the loss and the batch accuracy
 # 				# for example, if you are developping a new loss function, you might be better
-# 				# doing the online mining strategy inside the forward function of the loss class, 
+# 				# doing the online mining strategy inside the forward function of the loss class,
 # 				# and return a tuple containing the loss value and the batch_accuracy (the % of valid pairs or triplets)
 # 				loss, batch_acc = loss
 
@@ -142,15 +144,15 @@ class MixVPRModel(VPRModel):
 # 		self.log('b_acc', sum(self.batch_acc) /
 # 				len(self.batch_acc), prog_bar=True, logger=True)
 # 		return loss
-	
+
 # 	# This is the training step that's executed at each iteration
 # 	def training_step(self, batch, batch_idx):
 # 		places, labels = batch
-		
+
 # 		# Note that GSVCities yields places (each containing N images)
 # 		# which means the dataloader will return a batch containing BS places
 # 		BS, N, ch, h, w = places.shape
-		
+
 # 		# reshape places and labels
 # 		images = places.view(BS*N, ch, h, w)
 # 		labels = labels.view(-1)
@@ -158,10 +160,10 @@ class MixVPRModel(VPRModel):
 # 		# Feed forward the batch to the model
 # 		descriptors = self(images) # Here we are calling the method forward that we defined above
 # 		loss = self.loss_function(descriptors, labels) # Call the loss_function we defined above
-		
+
 # 		self.log('loss', loss.item(), logger=True)
 # 		return {'loss': loss}
-	
+
 # 	# This is called at the end of eatch training epoch
 # 	def training_epoch_end(self, training_step_outputs):
 # 		# we empty the batch_acc list for next epoch
@@ -174,10 +176,10 @@ class MixVPRModel(VPRModel):
 # 	# 	# calculate descriptors
 # 	# 	descriptors = self(places)
 # 	# 	return descriptors.detach().cpu()
-	
+
 # 	# def validation_epoch_end(self, val_step_outputs):
 # 	# 	"""this return descriptors in their order
-# 	# 	depending on how the validation dataset is implemented 
+# 	# 	depending on how the validation dataset is implemented
 # 	# 	for this project (MSLS val, Pittburg val), it is always references then queries
 # 	# 	[R1, R2, ..., Rn, Q1, Q2, ...]
 # 	# 	"""
@@ -186,10 +188,10 @@ class MixVPRModel(VPRModel):
 # 	# 	# we need to put the outputs in a list (Pytorch Lightning does not do it presently)
 # 	# 	if len(dm.val_datasets)==1: # we need to put the outputs in a list
 # 	# 		val_step_outputs = [val_step_outputs]
-		
+
 # 	# 	for i, (val_set_name, val_dataset) in enumerate(zip(dm.val_set_names, dm.val_datasets)):
 # 	# 		feats = torch.concat(val_step_outputs[i], dim=0)
-			
+
 # 	# 		if 'pitts' in val_set_name:
 # 	# 			# split to ref and queries
 # 	# 			num_references = val_dataset.dbStruct.numDb
@@ -206,7 +208,7 @@ class MixVPRModel(VPRModel):
 
 # 	# 		r_list = feats[ : num_references]
 # 	# 		q_list = feats[num_references : ]
-# 	# 		pitts_dict = utils.get_validation_recalls(r_list=r_list, 
+# 	# 		pitts_dict = utils.get_validation_recalls(r_list=r_list,
 # 	# 											q_list=q_list,
 # 	# 											k_values=[1, 5, 10, 15, 20, 50, 100],
 # 	# 											gt=positives,

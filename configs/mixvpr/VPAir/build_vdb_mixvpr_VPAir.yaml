@@ -1,17 +1,17 @@
 ROTREF_EXP: False
 
-savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/mixvpr/VPAir/paper_no_distractors
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/mixvpr/VPAir/paper_with_distractors_7030
 
 mixvpr:
   class_path: geoloc.relatedwork.mixvpr.MixVPRModel
-  checkpoint: /home/grega/geoloc/logs/lightning_logs/version_1/checkpoints/epoch=9-step=2360.ckpt
+  checkpoint: /home/grega/geoloc/logs/checkpoints/MixVPR/VPAir/MixVPR_VPAir_MixVPRResNetBackbone_N-align=True_lr=6e-05_bs=8_ep=10_20251107_114746-epoch=09-step=002360.ckpt
 
 dataset:
   #class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
   class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
   init_args:
     root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
-    include_distractors: False
+    include_distractors: True
     resize: [512, 512]
 
 vdb:

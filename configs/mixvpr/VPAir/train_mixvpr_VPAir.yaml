@@ -4,6 +4,7 @@ datamodule:
     init_args:
       root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
       resize: [512, 512]
+      north_align: True
   dataloader:
     batch_size: 8
     num_workers: 4
@@ -36,6 +37,7 @@ model:
       layers_to_freeze: 1
   aggregator:
     class_path: geoloc.models.aggregators.MixVPR
+    _pretrained_ckpt_path: /storage/datasets/AerialLoc/Drone2Sat/ckpts/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt
     init_args:
       in_channels: 1024
       in_h: 32
