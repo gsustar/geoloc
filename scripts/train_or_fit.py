@@ -1,0 +1,106 @@
+import os
+import argparse
+import datetime
+import lightning as L
+from torch.utils.data import DataLoader
+from geoloc.data.utils import collate_with_geometry
+from geoloc.trainer import GeolocTrainer
+
+from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+from geoloc.config_parser import load_config, save_config, namespace_to_dict, class_from_config
+from geoloc.utils import load_model
+
+def create_argparse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, required=True, help="Path to the configuration file")
+    return parser
+
+def create_run_name(config):
+    model_cls = config.model.class_path.split(".")[-1].lower()
+    dataset_name = f"{config.dataset.class_path.split('.')[-2]}"
+    run_name = f"{model_cls}_{dataset_name}_{config.model.init_args.backbone.class_path.split('.')[-1]}"
+    if getattr(config.dataset.init_args, "north_align", False):
+        run_name += f"_N-align"
+    if hasattr(config.model, "optimizer"):
+        run_name += f"_lr={config.model.optimizer.init_args.lr:.0e}"
+    if hasattr(config.trainer, "max_epochs"):
+         run_name += f"_ep={config.trainer.max_epochs}"
+    run_name += f"_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    return run_name
+
+def train(config):
+    train_dataset = class_from_config(config.dataset)
+    train_dataloader = DataLoader(
+        train_dataset,
+        collate_fn=collate_with_geometry,
+        **vars(config.dataloader)
+    )
+    build_dataset = class_from_config(config.build_config.dataset)
+    build_dataloader = DataLoader(
+        build_dataset,
+        shuffle=False,
+        batch_size=config.dataloader.batch_size,
+        drop_last=False,
+        collate_fn=collate_with_geometry,
+    )
+    benchmark_dataset = class_from_config(config.benchmark_config.dataset)
+    # model_cls, init_args = class_from_config(config.model, instantiate=False)
+    # if hasattr(config.model, "load_checkpoint"):
+    #     model = model_cls.load_from_checkpoint(
+    #         config.model.load_checkpoint, strict=False, weights_only=False,
+    #         **init_args
+    #     )
+    #     # model = load_model(config, device)
+    # else:
+    #     model = model_cls(**init_args)
+    # model.my_config = config.model
+    model = load_model(config)
+    model_cls_name = model.__class__.__name__.lower()
+
+    dataset_name = config.dataset.class_path.split(".")[-2]
+    run_name = create_run_name(config)
+    logger = WandbLogger(
+        project="geoloc",
+        group=model_cls_name,
+        name=run_name,
+        log_model=False,
+        config=namespace_to_dict(config),
+        **vars(config.logger)
+    )
+    
+    savedir = f"/home/grega/geoloc/logs/checkpoints/{model_cls_name}/{dataset_name}/{run_name}"
+    os.makedirs(savedir, exist_ok=True)
+    
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=savedir,
+        filename="{epoch:02d}-{step:06d}",
+        save_last=True,
+    )
+    lr_monitor = LearningRateMonitor(logging_interval='step')
+    trainer = GeolocTrainer(
+        **vars(config.trainer), 
+        callbacks=[checkpoint_callback, lr_monitor], 
+        logger=logger,
+        train_config=config,
+    )
+    # trainer = L.Trainer(
+    #     **vars(config.trainer), 
+    #     callbacks=[checkpoint_callback, lr_monitor], 
+    #     logger=logger
+    # )
+    # trainer.train_config = config
+    # trainer.steps_per_epoch = len(train_dataloader)
+    trainer.fit(model=model, train_dataloaders=train_dataloader, build_dataloader=build_dataloader, benchmark_dataset=benchmark_dataset)
+    save_config(config, savedir, prefix="train")
+
+
+def main():
+    parser = create_argparse()
+    args = parser.parse_args()
+    config = load_config(args.config)
+    train(config)
+
+
+if __name__ == "__main__":
+    main()

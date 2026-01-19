@@ -1,0 +1,19 @@
+ROTREF_EXP: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/mast3r_retrieval/VPAir/paper
+
+model:
+  class_path: geoloc.models.relatedwork.mast3r_retrieval.Mast3rRetrievalModel
+  load_checkpoint: /storage/datasets/AerialLoc/Drone2Sat/ckpts/mast3r_ret
+
+dataset:
+  #class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    include_distractors: False
+
+vdb:
+  class_path: geoloc.data.vdb.Mast3rASMKVectorDatabase
+  init_args:
+    checkpoint_path: /storage/datasets/AerialLoc/Drone2Sat/ckpts/mast3r_ret

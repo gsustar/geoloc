@@ -1,13 +1,10 @@
 import os
 import torch
 import pandas as pd
-
-import torchvision.transforms.functional as TF
 from ..utils import load_image, get_sorted_imgpaths
-from .base import ResizeCenterCropMixin
 
 
-class ALTOReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class ALTOReferenceImages(torch.utils.data.Dataset):
 
     def __init__(
         self,
@@ -15,10 +12,10 @@ class ALTOReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
         round=1,
         split="Train",
         offset="offset_0_None",
-        resize=None,
-        center_crop=None,
+        transforms=None,
     ):
-        super().__init__(resize=resize, center_crop=center_crop)
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.crs = "EPSG:32617"
         self.round = str(round)
@@ -41,7 +38,8 @@ class ALTOReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         img = load_image(self.references[index])
-        img = self.resize_centercrop(img)
+        if self.transforms is not None:
+            img = self.transforms(img)
         img = img / 255.0
         filename = self.references[index]
         east = self.info["easting"].iloc[index]
@@ -55,10 +53,11 @@ class ALTOReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
         )
 
 
-class ALTOQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class ALTOQueryImages(torch.utils.data.Dataset):
 
-    def __init__(self, root, round=1, split="Val", resize=None, center_crop=None):
-        super().__init__(resize=resize, center_crop=center_crop)
+    def __init__(self, root, round=1, split="Val", transforms=None):
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.round = str(round)
         assert self.round in ["1", "2"]
@@ -76,7 +75,8 @@ class ALTOQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         img = load_image(self.queries[index])
-        img = self.resize_centercrop(img)
+        if self.transforms is not None:
+            img = self.transforms(img)
         img = img / 255.0
         filename = self.queries[index]
         east = self.info["easting"].iloc[index]

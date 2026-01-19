@@ -1,0 +1,92 @@
+model:
+  class_path: geoloc.models.canori.ctonn.LCTONN
+  init_args:
+    stn_model:
+      class_path: geoloc.models.canori.ctonn.StnNet2
+      init_args:
+        embedding_net:
+          class_path: geoloc.models.canori.ctonn.EmbeddingNet
+    optimizer:
+      class_path: torch.optim.AdamW
+      init_args:
+        lr: 2.0e-5
+    # scheduler:
+    #   interval: "epoch"
+    #   class_path: torch.optim.lr_scheduler.StepLR
+    #   init_args:
+    #     step_size: 200
+    #     gamma: 0.1
+    losses: ["theta_mse", "feat_l1"]
+    lmbd_losses: [1.0, 0.1]
+    k: 36
+
+dataset:
+  class_path: geoloc.data.datasets.VPAir.VPAirTrainDataset
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    north_align: True
+    split: train
+    # transforms:
+    #   class_path: torchvision.transforms.Compose
+    #   init_args:
+    #     transforms:
+    #       - class_path: torchvision.transforms.CenterCrop
+    #         init_args:
+    #           size: [512]
+    #       - class_path: torchvision.transforms.Resize
+    #         init_args:
+    #           size: [224, 224]
+    #       - class_path: torchvision.transforms.Normalize
+    #         init_args:
+    #           mean: [0.485, 0.456, 0.406]
+    #           std: [0.229, 0.224, 0.225]
+          # - class_path: geoloc.data.transforms.CircleMaskCrop
+
+dataloader:
+  batch_size: 24
+  num_workers: 2
+  shuffle: True
+  drop_last: True
+  pin_memory: False
+
+trainer:
+  accelerator: 'gpu'
+  devices: 1
+  default_root_dir: './logs/'
+  num_nodes: 1
+  num_sanity_val_steps: 0
+  # precision: '16-mixed'
+  max_epochs: 200
+  check_val_every_n_epoch: 10
+  reload_dataloaders_every_n_epochs: 1
+  log_every_n_steps: 20
+  save_checkpoint_every_n_epochs: 50
+  # overfit_batches: 10
+  # gradient_clip_val: 1.0
+
+logger: # WandbLogger config
+  offline: False
+  save_dir: /home/grega/geoloc/logs/
+
+benchmark_config:
+  dataset:
+    class_path: geoloc.data.datasets.VPAir.VPAirTrainDataset
+    init_args:
+      root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+      north_align: False
+      split: test
+      # transforms:
+      #   class_path: torchvision.transforms.Compose
+      #   init_args:
+      #     transforms:
+      #       - class_path: torchvision.transforms.CenterCrop
+      #         init_args:
+      #           size: [512]
+      #       - class_path: torchvision.transforms.Resize
+      #         init_args:
+      #           size: [224, 224]
+      #       - class_path: torchvision.transforms.Normalize
+      #         init_args:
+      #           mean: [0.485, 0.456, 0.406]
+      #           std: [0.229, 0.224, 0.225]
+            # - class_path: geoloc.data.transforms.CircleMaskCrop

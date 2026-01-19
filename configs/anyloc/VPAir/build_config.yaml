@@ -1,0 +1,25 @@
+ROTREF_EXP: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/anyloc/VPAir/with_rotator_new
+# loaddir: &loaddir /storage/datasets/AerialLoc/Drone2Sat/vdbs/anyloc/VPAir/debug
+
+model:
+  class_path: geoloc.models.relatedwork.anyloc.AnyLoc
+  load_checkpoint: /home/grega/geoloc/logs/checkpoints/anyloc/VPAir/anyloc_VPAir_dinov2_vitg14_vlad_ep=1_20251215_191914/last.ckpt
+  # load_checkpoint: /home/grega/geoloc/logs/checkpoints/anyloc/VPAir/anyloc_ds:VPAirTestDatasetReferenceImages_ep:1_20260112_125252/last.ckpt # This is with rotator
+
+dataset:
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    include_distractors: False
+    # canonical_ori: True
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 49152 # this is with dinov2-giant
+    # vdim: 40960 # this is with dinov3-h16plus 
+    distfn: cosine
+    norm_vec: True
+    faiss_gpu: True

@@ -15,19 +15,27 @@ def visualize_top_k_retrieved(
     inds,
     ref_image_dataset,
     savedir,
+    filename=None,
     gdists=None,
     min_dists_at_k=None,
     gt_pos=None,
     rotexp_thetas=[0],
     query_theta=0,
+    rotator_theta=None,
+    rotator_ref_thetas=None,
 ):
     fig, axes = plt.subplots(1, 6, figsize=(15, 4))
 
+    if rotator_theta is not None:
+        rotator_theta  = rotator_theta * 180.0 / torch.pi
+        query_image = TF.rotate(query_image, rotator_theta)
+    else:
+        rotator_theta = 0
     query_image = query_image.cpu().numpy() * 255
     query_image = query_image.astype(np.uint8)
 
     axes[0].imshow(query_image.transpose(1, 2, 0))
-    axes[0].set_title(f"Qry | rot: {query_theta}°")
+    axes[0].set_title(f"Qry | rot: {query_theta:.2f}° | rrot: {rotator_theta:.2f}°")
     axes[0].axis("off")
 
     for j in range(1, 6):
@@ -37,13 +45,21 @@ def visualize_top_k_retrieved(
         rot_ix = inds[0, j - 1] // len(ref_image_dataset)
         rot = rotexp_thetas[rot_ix]
         ref_im = TF.rotate(ref_im, rot)
+
+        if rotator_ref_thetas is not None:
+            ref_rotator_theta = rotator_ref_thetas[ref_im_ix]
+            ref_rotator_theta = ref_rotator_theta * 180.0 / np.pi
+            ref_im = TF.rotate(ref_im, ref_rotator_theta)
+        else:
+            ref_rotator_theta = 0
+
         ref_im = TF.resize(ref_im, (query_image.shape[1], query_image.shape[2]))
         ref_im = ref_im.cpu().numpy() * 255
         ref_im = ref_im.astype(np.uint8)
 
-        ref_title = f"Ref{j-1} | rot: {rot}°"
+        ref_title = f"Ref{j-1} | rot: {rot} | rrot: {ref_rotator_theta:.2f}°"
         if gdists is not None:
-            ref_title = f"Ref{j-1} ({gdists[j-1]:.2f} m) | rot: {rot}°"
+            ref_title = f"Ref{j-1} ({gdists[j-1]:.2f} m) | rot: {rot:.2f} | rrot: {ref_rotator_theta:.2f}°"
 
         axes[j].imshow(ref_im.transpose(1, 2, 0))
         axes[j].set_title(ref_title)
@@ -67,7 +83,9 @@ def visualize_top_k_retrieved(
 
     fig.suptitle(title, fontsize=13)
     plt.tight_layout(rect=[0, 0, 1, 0.92])
-    save_path = os.path.join(savedir, f"query_{query_ix:03d}_rot_{query_theta:03d}.png")
+    if filename is None:
+        filename = f"query_{query_ix:03d}_rot_{query_theta:03d}.png"
+    save_path = os.path.join(savedir, filename)
     plt.savefig(save_path, dpi=DPI)
     plt.close(fig)
 

@@ -1,0 +1,19 @@
+VISUALIZE_TOP_K: True
+VISUALIZE_HEATMAP: False
+
+every_n: 1
+benchmark_top_k: [1, 5, 10, 25, 50, 100]
+benchmark_recall_at_xmeters: [100, 150, 200, 250, 500, 1000]
+
+dataset:
+  class_path: geoloc.data.datasets.VisLoc.VisLocQueryImages
+  init_args:
+    root: /storage/datasets/AerialLoc/UAV_VisLoc/
+    flight_idx: 1
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: 504

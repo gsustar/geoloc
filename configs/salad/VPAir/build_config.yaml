@@ -1,0 +1,28 @@
+ROTREF_EXP: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/salad/VPAir/paper_no_distractors_7030
+
+model:
+  class_path: geoloc.models.relatedwork.salad.SALADModel
+  load_checkpoint: /home/grega/geoloc/logs/checkpoints/SALAD/VPAir/SALAD_VPAir_SaladDINOv2Backbone_N-align=True_lr=6e-05_bs=8_ep=10_20251106_124947-epoch=09-step=002360.ckpt
+
+dataset:
+  #class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    include_distractors: False
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: 504
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 8448
+    distfn: cosine
+    norm_vec: True

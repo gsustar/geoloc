@@ -1,24 +1,21 @@
 import os
 import json
 import torch
-import torchvision.transforms.functional as TF
 
 from ..utils import get_sorted_imgpaths, load_image
-from .base import ResizeCenterCropMixin
 
 
-class ViCoSQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class ViCoSQueryImages(torch.utils.data.Dataset):
     """
     Query image are image obtained from a ViCoS Drone trajectory.
     """
 
-    def __init__(self, root, resize=None, center_crop=None):
-        super().__init__(resize=resize, center_crop=center_crop)
+    def __init__(self, root, transforms=None):
+        super().__init__()
         self.root = root
         self.crs = "EPSG:4326"
-        self.query_images = get_sorted_imgpaths(
-            root
-        )  # Load query images from the root directory
+        self.query_images = get_sorted_imgpaths(root)
+        self.transforms = transforms
 
         # Open metadata file
         metadata_path = os.path.join(root, "metadata.json")
@@ -30,7 +27,8 @@ class ViCoSQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         img = load_image(self.query_images[index])
-        img = self.resize_centercrop(img)
+        if self.transforms is not None:
+            img = self.transforms(img)
         img = img / 255.0
         filename = os.path.basename(self.query_images[index])
         img_metadata = self.metadata[self.query_images[index]]

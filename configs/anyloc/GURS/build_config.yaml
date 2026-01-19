@@ -1,0 +1,17 @@
+ROTREF_EXP: False
+
+dataset:
+  class_path: geoloc.data.datasets.GURS.GURSReferenceDataset
+  init_args:
+    root: /storage/private/MORS/gurs/
+    stride: 500
+    tile_size: 500
+    border: Ljubljana
+    exclude_slo_border_tifs: True
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 32
+    distfn: l2
+    norm_vec: True

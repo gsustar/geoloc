@@ -6,27 +6,25 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import torchvision.transforms.functional as F
 
 from rasterio.transform import xy
 from rasterio.windows import Window
 from shapely.geometry import box
 
 from ..utils import pad_to_size, get_sorted_imgpaths, load_image
-from .base import ResizeCenterCropMixin
 
 
-class VisLocReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class VisLocReferenceImages(torch.utils.data.Dataset):
     def __init__(
         self,
         root,
         flight_idx,
         tile_size=256,
         stride=None,
-        resize=None,
-        center_crop=None,
+        transforms=None,
     ):
-        super().__init__(resize=resize, center_crop=center_crop)
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.crs = "EPSG:4326"
         self.flight_idx = f"{int(flight_idx):02d}"
@@ -81,8 +79,9 @@ class VisLocReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
         assert (
             tile.shape[1] == tile.shape[2] == self.tile_size
         ), f"Tile shape mismatch: {tile.shape} != ({self.tile_size}, {self.tile_size})"
-        # Resize if requested
-        tile = self.resize_centercrop(tile)
+        # Apply transforms if provided
+        if self.transforms is not None:
+            tile = self.transforms(tile)
         tile = tile / 255.0  # Normalize to [0, 1]
 
         # Get center coordinates (lat/lon or projection units)
@@ -176,10 +175,11 @@ class VisLocReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 # 		)
 
 
-class VisLocQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class VisLocQueryImages(torch.utils.data.Dataset):
 
-    def __init__(self, root, flight_idx, resize=None, center_crop=None):
-        super().__init__(resize=resize, center_crop=center_crop)
+    def __init__(self, root, flight_idx, transforms=None):
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.crs = "EPSG:4326"
         self.flight_idx = f"{int(flight_idx):02d}"
@@ -198,7 +198,8 @@ class VisLocQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         img = load_image(self.query_images[index])
-        img = self.resize_centercrop(img)
+        if self.transforms is not None:
+            img = self.transforms(img)
         img = img / 255.0
         filename = os.path.basename(self.query_images[index])
         img_metadata = self.query_metadata.iloc[index]
@@ -219,12 +220,11 @@ VISLOC_TRAIN_ROUNDS = ["04", "05", "06", "08", "09", "10", "11"]
 VISLOC_TEST_ROUNDS = ["01", "02", "03"]
 
 
-class VisLocTrainDataset(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class VisLocTrainDataset(torch.utils.data.Dataset):
 
-    def __init__(
-        self, root: str, north_align: bool = False, resize=None, center_crop=None
-    ):
-        super().__init__(resize=resize, center_crop=center_crop)
+    def __init__(self, root: str, north_align: bool = False, transforms=None):
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.crs = "EPSG:4326"
         self.north_align = north_align
@@ -262,11 +262,13 @@ class VisLocTrainDataset(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         query = load_image(self.all_query_images[index])
-        query = self.resize_centercrop(query)
+        if self.transforms is not None:
+            query = self.transforms(query)
         query = query / 255.0
 
         ref = load_image(self.all_reference_views[index])
-        ref = self.resize_centercrop(ref)
+        if self.transforms is not None:
+            ref = self.transforms(ref)
         ref = ref / 255.0
 
         filename = os.path.basename(self.all_query_images[index])

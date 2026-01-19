@@ -4,8 +4,10 @@ import torch
 import numpy as np
 import pandas as pd
 
+import torchvision.transforms as T
+import torchvision.transforms.functional as TF
+
 from ..utils import load_image, get_sorted_imgpaths
-from .base import ResizeCenterCropMixin
 
 
 def _load_poses(root):
@@ -41,17 +43,17 @@ def _load_gt_pos(root):
     return np.load(os.path.join(root, "vpair_gt.npy"), allow_pickle=True)
 
 
-class VPAirReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class VPAirReferenceImages(torch.utils.data.Dataset):
 
     def __init__(
         self,
         root: str,
         include_distractors: bool = True,
         canonical_ori: bool = False,
-        resize=None,
-        center_crop=None,
+        transforms=None,
     ):
-        super().__init__(resize=resize, center_crop=center_crop)
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.crs = "EPSG:4326"
         self.include_distractors = include_distractors
@@ -76,7 +78,8 @@ class VPAirReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
     def __getitem__(self, index):
         is_distractor = index >= self.num_reference_views
         img = load_image(self.reference_images[index])
-        img = self.resize_centercrop(img)
+        if self.transforms is not None:
+            img = self.transforms(img)
         img = img / 255.0
         filename = os.path.basename(self.reference_images[index])
         # Distractors do not have pose information
@@ -95,7 +98,7 @@ class VPAirReferenceImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
         )
 
 
-class VPAirQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class VPAirQueryImages(torch.utils.data.Dataset):
 
     def __init__(
         self,
@@ -103,15 +106,20 @@ class VPAirQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
         soft_positive_offset: int = 3,
         north_align=False,
         canonical_ori=False,
-        resize=None,
-        center_crop=None,
+        transforms=None,
     ):
-        super().__init__(resize=resize, center_crop=center_crop)
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.crs = "EPSG:4326"
         self.north_align = north_align
+        self.canonical_ori = canonical_ori
+        assert not (north_align and canonical_ori)
+        # self.queries = _load_queries(
+        #     root, north_aligned=north_align, canonical_ori=canonical_ori
+        # )
         self.queries = _load_queries(
-            root, north_aligned=north_align, canonical_ori=canonical_ori
+            root, canonical_ori=canonical_ori
         )
         self.poses = _load_poses(root)
         # self.gt_pos = _load_gt_pos(root)
@@ -122,12 +130,26 @@ class VPAirQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         img = load_image(self.queries[index])
-        img = self.resize_centercrop(img)
+        if self.north_align:
+            yaw = self.poses["yaw"].iloc[index]
+            img = TF.rotate(
+                img,
+                angle=(-yaw * 180.0 / torch.pi).item(),
+                interpolation=T.InterpolationMode.BILINEAR,
+            )
+        if self.transforms is not None:
+            img = self.transforms(img)
         img = img / 255.0
         filename = os.path.basename(self.queries[index])
+
         lon = self.poses["lon"].iloc[index]
         lat = self.poses["lat"].iloc[index]
         alt = self.poses["altitude"].iloc[index]
+
+        roll = self.poses["roll"].iloc[index]
+        pitch = self.poses["pitch"].iloc[index]
+        yaw = self.poses["yaw"].iloc[index] # This is the CW rotation of drone image wrt north, in radians
+
         gt_pos = np.unique(
             np.clip(
                 list(
@@ -149,31 +171,40 @@ class VPAirQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
             lon=lon,
             lat=lat,
             alt=alt,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw,
             gt_pos=gt_pos,
         )
 
 
 VPAIR_TRAIN_TEST_SPLIT = 0.7
-
-
-class VPAirTrainDataset(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class VPAirTrainDataset(torch.utils.data.Dataset):
 
     def __init__(
-        self, root: str, north_align: bool = False, resize=None, center_crop=None
+        self, root: str, north_align: bool = False,
+        transforms=None, split: str = "train",
     ):
-        super().__init__(resize=resize, center_crop=center_crop)
+        super().__init__()
         self.root = root
-        self.crs = "EPSG:4326"
+        self.transforms = transforms
         self.north_align = north_align
-
-        self.queries = _load_queries(root, north_aligned=north_align)
+        # self.queries = _load_queries(root, north_aligned=north_align)
+        self.queries = _load_queries(root)
         self.reference_views = _load_reference_views(root)
 
         train_cut = int(np.floor(len(self.queries) * VPAIR_TRAIN_TEST_SPLIT))
-        self.queries = self.queries[:train_cut]
-        self.reference_views = self.reference_views[:train_cut]
-        self.poses = _load_poses(root).iloc[:train_cut].reset_index(drop=True)
-        # self.poses = self.poses.iloc[:train_cut].reset_index(drop=True)
+        if split == "train":
+            self.queries = self.queries[:train_cut]
+            self.reference_views = self.reference_views[:train_cut]
+            self.poses = _load_poses(root).iloc[:train_cut].reset_index(drop=True)
+        elif split == "test":
+            self.queries = self.queries[train_cut:]
+            self.reference_views = self.reference_views[train_cut:]
+            self.poses = _load_poses(root).iloc[train_cut:].reset_index(drop=True)
+        else:
+            raise ValueError(f"Invalid split: {split}. Must be 'train' or 'test'.")
+
 
     def __len__(self):
         assert len(self.queries) == len(self.reference_views)
@@ -181,16 +212,31 @@ class VPAirTrainDataset(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         query = load_image(self.queries[index])
-        query = self.resize_centercrop(query)
+        if self.north_align:
+            yaw = self.poses["yaw"].iloc[index]
+            query = TF.rotate(
+                query,
+                angle=(-yaw * 180.0 / torch.pi).item(),
+                interpolation=T.InterpolationMode.BILINEAR,
+            )
+        
+        if self.transforms is not None:
+            query = self.transforms(query)
         query = query / 255.0
 
         ref = load_image(self.reference_views[index])
-        ref = self.resize_centercrop(ref)
+        if self.transforms is not None:
+            ref = self.transforms(ref)
         ref = ref / 255.0
+
 
         lon = self.poses["lon"].iloc[index]
         lat = self.poses["lat"].iloc[index]
         alt = self.poses["altitude"].iloc[index]
+
+        roll = self.poses["roll"].iloc[index]
+        pitch = self.poses["pitch"].iloc[index]
+        yaw = self.poses["yaw"].iloc[index]
 
         imgs = torch.stack([query, ref], dim=0)
         return dict(
@@ -199,8 +245,52 @@ class VPAirTrainDataset(torch.utils.data.Dataset, ResizeCenterCropMixin):
             lon=lon,
             lat=lat,
             alt=alt,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw, # Make sure yaw is in radians!!!
         )
 
+class VPAirTrainDatasetQueryImages(VPAirQueryImages):
+
+    def __init__(
+        self,
+        root: str,
+        soft_positive_offset: int = 3,
+        north_align=False,
+        canonical_ori=False,
+        transforms=None,
+    ):
+        super().__init__(
+            root=root,
+            soft_positive_offset=soft_positive_offset,
+            north_align=north_align,
+            canonical_ori=canonical_ori,
+            transforms=transforms,
+        )
+        train_cut = int(np.floor(len(self.queries) * VPAIR_TRAIN_TEST_SPLIT))
+        self.queries = self.queries[:train_cut]
+        self.poses = self.poses.iloc[:train_cut].reset_index(drop=True)
+
+
+class VPAirTrainDatasetReferenceImages(VPAirReferenceImages):
+
+    def __init__(
+        self,
+        root: str,
+        include_distractors: bool = True,
+        canonical_ori: bool = False,
+        transforms=None,
+    ):
+        super().__init__(
+            root=root,
+            include_distractors=include_distractors,
+            canonical_ori=canonical_ori,
+            transforms=transforms,
+        )
+        train_cut = int(np.floor(self.num_reference_views * VPAIR_TRAIN_TEST_SPLIT))
+        self.num_reference_views = train_cut
+        self.reference_images = self.reference_images[:train_cut]
+        self.poses = self.poses.iloc[:train_cut].reset_index(drop=True)
 
 class VPAirTestDatasetQueryImages(VPAirQueryImages):
 
@@ -210,16 +300,14 @@ class VPAirTestDatasetQueryImages(VPAirQueryImages):
         soft_positive_offset: int = 3,
         north_align=False,
         canonical_ori=False,
-        resize=None,
-        center_crop=None,
+        transforms=None,
     ):
         super().__init__(
             root=root,
             soft_positive_offset=soft_positive_offset,
             north_align=north_align,
             canonical_ori=canonical_ori,
-            resize=resize,
-            center_crop=center_crop,
+            transforms=transforms,
         )
         train_cut = int(np.floor(len(self.queries) * VPAIR_TRAIN_TEST_SPLIT))
         self.queries = self.queries[train_cut:]
@@ -233,15 +321,13 @@ class VPAirTestDatasetReferenceImages(VPAirReferenceImages):
         root: str,
         include_distractors: bool = True,
         canonical_ori: bool = False,
-        resize=None,
-        center_crop=None,
+        transforms=None,
     ):
         super().__init__(
             root=root,
             include_distractors=include_distractors,
             canonical_ori=canonical_ori,
-            resize=resize,
-            center_crop=center_crop,
+            transforms=transforms,
         )
         train_cut = int(np.floor(self.num_reference_views * VPAIR_TRAIN_TEST_SPLIT))
         self.num_reference_views = self.num_reference_views - train_cut

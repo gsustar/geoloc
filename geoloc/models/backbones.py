@@ -1,32 +1,49 @@
-from typing_extensions import Literal
 import torch
-import transformers
-import torch.nn as nn
 import einops
 import torchvision
-
-from .utils import freeze
-import torchvision.transforms as T
-import torchvision.transforms.functional as TF
+import transformers
+import torch.nn as nn
 import torch.nn.functional as F
 
-
-def dino_processor(x: torch.Tensor, patch_size: int, return_latent_size: bool = False):
-    c, h, w = x.shape[-3:]
-    new_h, new_w = (h // patch_size) * patch_size, (w // patch_size) * patch_size
-    x = TF.normalize(x, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-    x = TF.center_crop(x, (new_h, new_w))
-    if return_latent_size:
-        latent_size = (new_h // patch_size, new_w // patch_size)
-        return x, latent_size
-    return x
+from copy import deepcopy
+from .utils import freeze, unfreeze_layers, dino_processor, remove_registers_and_cls_token
 
 
-def remove_registers_and_cls_token(backbone_features: torch.Tensor, latent_size: tuple):
-    num_feat_tkns = latent_size[0] * latent_size[1]
-    num_all_tkns = backbone_features.shape[1]
-    start_idx = num_all_tkns - num_feat_tkns
-    return backbone_features[:, start_idx:, ...]
+class MultiScaleOutputMixin:
+    """Mixin for models that support multi-scale feature extraction from hidden layers."""
+    def setup_multiscale_output(
+        self,
+        backbone_num_hidden_layers=None,
+        backbone_hidden_size=None,
+        out_indices=None,
+        out_channels=None,
+    ):
+        self.output_hidden_states = False
+        self.out = nn.Identity()
+        self.output_dim = backbone_hidden_size
+        
+        if out_indices is not None:
+            if out_indices == "auto":
+                out_indices = torch.arange(
+                    backbone_num_hidden_layers - 1,
+                    0,
+                    -backbone_num_hidden_layers // 4
+                ).tolist()[::-1]
+            
+            assert max(out_indices) <= backbone_num_hidden_layers - 1, \
+                f"Max out_index {max(out_indices)} exceeds num_hidden_layers {backbone_num_hidden_layers}"
+            assert out_channels is not None, \
+                "out_channels must be specified when using out_indices"
+            
+            self.output_hidden_states = True
+            in_channels = len(out_indices) * backbone_hidden_size
+            self.out_indices = out_indices
+            self.output_dim = out_channels
+            
+            self.out = nn.Sequential(
+                nn.Linear(in_channels, out_channels, bias=True),
+                nn.LayerNorm(out_channels)
+            )
 
 
 class AnyLocDINOv3Backbone(nn.Module):
@@ -38,6 +55,7 @@ class AnyLocDINOv3Backbone(nn.Module):
         facet="value",
         use_cls=False,
         norm_descs=True,
+        pretrained_model_name_or_path="facebook/dinov3-vitb16-pretrain-lvd1689m",
     ):
         super().__init__()
         self.layer = layer
@@ -46,7 +64,12 @@ class AnyLocDINOv3Backbone(nn.Module):
         self.norm_descs = norm_descs
         assert self.facet in ["value", "token"]
 
-        self.backbone = HFaceDINOv3Backbone()
+        self.backbone = HFaceDINOBackbone(
+            pretrained_model_name_or_path=pretrained_model_name_or_path
+        )
+        self.model_name = pretrained_model_name_or_path
+        self.backbone = freeze(self.backbone)
+        self.backbone.eval()
 
         if self.facet == "token":
             self.fn_handle = self.backbone.backbone.layer[
@@ -156,54 +179,54 @@ class AnyLocDINOv2Backbone(nn.Module):
         self.fh_handle.remove()
 
 
-class HFaceDINOv2Backbone(nn.Module):
+class HFaceDINOBackbone(nn.Module, MultiScaleOutputMixin):
     def __init__(
-        self,
-        pretrained_model_name_or_path="facebook/dinov2-giant",
+        self, 
+        pretrained_model_name_or_path="facebook/dinov3-vitl16-pretrain-sat493m",
+        return_cls_token=False,
+        num_trainable_blocks=0,
+        out_indices=None,
+        out_channels=None,
     ):
         super().__init__()
         self.pretrained_model_name_or_path = pretrained_model_name_or_path
+        self.model_name = pretrained_model_name_or_path.split("/")[1]
         self.backbone = transformers.AutoModel.from_pretrained(
             pretrained_model_name_or_path
         )
         self.backbone = freeze(self.backbone)
-        self.backbone.eval()
+        self.backbone = unfreeze_layers(self.backbone, num_trainable_blocks)
+        # self.backbone.eval()
         self.output_dim = self.backbone.config.hidden_size
         self.patch_size = self.backbone.config.patch_size
+        self.return_cls_token = return_cls_token
+        self.num_trainable_blocks = num_trainable_blocks
+
+        self.setup_multiscale_output(
+            backbone_hidden_size=self.backbone.config.hidden_size,
+            backbone_num_hidden_layers=self.backbone.config.num_hidden_layers,
+            out_indices=out_indices,
+            out_channels=out_channels,
+        )
 
     def processor(self, x: torch.Tensor):
         return dino_processor(x, self.patch_size, return_latent_size=True)
 
     def forward(self, x: torch.Tensor):
         x, latent_size = self.processor(x)
-        x = self.backbone(x)
-        x = remove_registers_and_cls_token(x.last_hidden_state, latent_size)
-        x = x.transpose(1, 2).reshape(x.shape[0], -1, latent_size[0], latent_size[1])
-        return x
+        x = self.backbone(x, output_hidden_states=self.output_hidden_states)
+        if self.output_hidden_states:
+            x = torch.cat([x.hidden_states[index+1] for index in self.out_indices], dim=-1)
+        else:
+            x = x.last_hidden_state
+        x = self.out(x)
 
-
-class HFaceDINOv3Backbone(nn.Module):
-    def __init__(
-        self, pretrained_model_name_or_path="facebook/dinov3-vitl16-pretrain-sat493m"
-    ):
-        super().__init__()
-        self.pretrained_model_name_or_path = pretrained_model_name_or_path
-        self.backbone = transformers.AutoModel.from_pretrained(
-            pretrained_model_name_or_path
+        x, cls_token = remove_registers_and_cls_token(x, latent_size, return_cls_tokens=True)
+        x = einops.rearrange(
+            x, "b (h w) c -> b c h w", h=latent_size[0], w=latent_size[1]
         )
-        self.backbone = freeze(self.backbone)
-        self.backbone.eval()
-        self.output_dim = self.backbone.config.hidden_size
-        self.patch_size = self.backbone.config.patch_size
-
-    def processor(self, x: torch.Tensor):
-        return dino_processor(x, self.patch_size, return_latent_size=True)
-
-    def forward(self, x: torch.Tensor):
-        x, latent_size = self.processor(x)
-        x = self.backbone(x)
-        x = remove_registers_and_cls_token(x.last_hidden_state, latent_size)
-        x = x.transpose(1, 2).reshape(x.shape[0], -1, latent_size[0], latent_size[1])
+        if self.return_cls_token:
+            return x, cls_token
         return x
 
 
@@ -213,8 +236,6 @@ DINOV2_ARCHS = {
     "dinov2_vitl14": 1024,
     "dinov2_vitg14": 1536,
 }
-
-
 class SaladDINOv2Backbone(nn.Module):
     """
     DINOv2 model
@@ -242,6 +263,7 @@ class SaladDINOv2Backbone(nn.Module):
         self.num_trainable_blocks = num_trainable_blocks
         self.norm_layer = norm_layer
         self.return_token = return_token
+        self.model_name = model_name
 
     def forward(self, x):
         """
@@ -383,3 +405,100 @@ class MixVPRResNetBackbone(nn.Module):
         if self.model.layer4 is not None:
             x = self.model.layer4(x)
         return x
+
+
+class RADIOBackbone(nn.Module, MultiScaleOutputMixin):
+    def __init__(self,
+            model_name="radio_v2.5-l",
+            return_cls_token=False,
+            out_indices=None,
+            out_channels=None,
+        ):
+        super().__init__()
+        self.model_name = model_name
+        self.backbone = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_name, progress=False, skip_validation=True)
+        self.backbone = freeze(self.backbone)
+        self.return_cls_token = return_cls_token
+        # self.backbone = unfreeze_layers(self.backbone, num_trainable_blocks)
+        self.setup_multiscale_output(
+            backbone_hidden_size=self.backbone.model.embed_dim,
+            backbone_num_hidden_layers=len(self.backbone.model.blocks),
+            out_indices=out_indices,
+            out_channels=out_channels,
+        )
+
+    def forward(self, x: torch.Tensor):
+        (summary, final), features = self.backbone.forward_intermediates(x, indices=self.out_indices)
+        _, _, lh, lw = final.shape
+        if self.output_hidden_states:
+            x = torch.cat(features, dim=-3)
+            x = einops.rearrange(x, "b c h w -> b (h w) c")
+        else:
+            x = final
+        x = self.out(x)
+        x = einops.rearrange(x, "b (h w) c -> b c h w", h=lh, w=lw)
+        if self.return_cls_token:
+            return x, summary
+        return x
+
+
+class CTONN_VGGBackbone(nn.Module):
+    def __init__(self):
+        super().__init__()
+        model_dic = self.VGG16_initializator()
+
+        self.CBR1_ENC = self.make_layers_from_names(["conv1_1", "conv1_2"], model_dic, 64)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.CBR2_ENC = self.make_layers_from_names(["conv2_1", "conv2_2"], model_dic, 128)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.CBR3_ENC = self.make_layers_from_names(["conv3_1", "conv3_2", "conv3_3"], model_dic, 256)
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.CBR4_ENC = self.make_layers_from_names(["conv4_1", "conv4_2", "conv4_3"], model_dic, 512)
+        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.CBR5_ENC = self.make_layers_from_names(["conv5_1", "conv5_2", "conv5_3"], model_dic, 512)
+        self.pool5 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.output_dim = 512  # assuming input images are resized to 224x224
+
+    def VGG16_initializator(self):
+        layer_names = ["conv1_1", "conv1_2", "conv2_1", "conv2_2", "conv3_1", "conv3_2", "conv3_3",
+                    "conv4_1", "conv4_2", "conv4_3", "conv5_1", "conv5_2", "conv5_3"]
+        layers = list(torchvision.models.vgg16_bn(pretrained=True).features.children())
+        layers = [x for x in layers if isinstance(x, nn.Conv2d)]
+        layer_dic = dict(zip(layer_names, layers))
+        return layer_dic
+
+
+    def make_layers_from_names(self, names, model_dic, bn_dim, existing_layer=None):
+        layers = []
+        if existing_layer is not None:
+            layers = [existing_layer, nn.BatchNorm2d(bn_dim, momentum=0.1), nn.ReLU(inplace=True)]
+        for name in names:
+            layers += [deepcopy(model_dic[name]), nn.BatchNorm2d(bn_dim, momentum=0.1), nn.ReLU(inplace=True)]
+
+        return nn.Sequential(*layers)
+    
+    # @torch.no_grad()
+    def processor(self, x):
+        # x = torchvision.transforms.functional.center_crop(x, 512)
+        x = torchvision.transforms.functional.resize(x, (224, 224))
+        x = torchvision.transforms.functional.normalize(
+            x,
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225],
+        )
+        return x
+
+    def forward(self, x):
+        x = self.processor(x)
+        xs = self.pool1(self.CBR1_ENC(x))
+        xs = self.pool2(self.CBR2_ENC(xs))
+        xs = self.pool3(self.CBR3_ENC(xs))
+        xs = self.pool4(self.CBR4_ENC(xs))
+        xs = self.pool5(self.CBR5_ENC(xs))
+        # xs = xs.view(-1, 512 * 7 * 7)
+        return xs

@@ -1,0 +1,13 @@
+ROTTRAJ_EXP: False
+VISUALIZE_VLAD: True
+VISUALIZE_TOP_K: True
+VISUALIZE_HEATMAP: True
+
+every_n: 1
+benchmark_top_k: [1, 5, 10, 25, 50, 100]
+benchmark_recall_at_xmeters: [100, 150, 200, 250, 500, 1000]
+
+dataset:
+  class_path: geoloc.data.datasets.ViCoS.ViCoSQueryImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/GES/Traj1_Ljubljana_150m_N-align/

@@ -1,0 +1,20 @@
+ROTREF_EXP: False
+
+model:
+  class_path: geoloc.models.relatedwork.segvlad.SegVladModel
+  load_checkpoint: /storage/datasets/AerialLoc/Drone2Sat/ckpts/segvlad/VPAir/best.ckpt
+
+dataset:
+  # class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    include_distractors: False
+    canonical_ori: True
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 49152
+    distfn: cosine
+    norm_vec: True

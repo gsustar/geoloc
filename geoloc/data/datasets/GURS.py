@@ -11,6 +11,7 @@ from shapely.prepared import prep
 from rasterio.merge import merge
 from rasterio.windows import Window
 
+from pyproj import Transformer
 
 class GURSDataset:
     """Base class for GURS datasets."""
@@ -252,15 +253,17 @@ class GURSReferenceDataset(SequentialGURSDataset):
 
     def get_eastnorth_only(self, index):
         win_bounds = self.all_windows.iloc[index].geometry
-        # win_bounds = box(
-        # 	win_bounds[0], # northing
-        # 	win_bounds[1] - (self.tile_size * self.pxl_res), # easting
-        # 	win_bounds[0] + (self.tile_size * self.pxl_res),
-        # 	win_bounds[1],
-        # )
         east = (win_bounds.bounds[0] + win_bounds.bounds[2]) / 2
         north = (win_bounds.bounds[1] + win_bounds.bounds[3]) / 2
         return east, north
+    
+    def get_tile(self, lon, lat, crs="EPSG:4326"):
+        east, north = Transformer.from_crs(crs, self.crs, always_xy=True).transform(lon, lat)
+        point = shapely.geometry.Point(east, north)
+        index = self.all_windows[self.all_windows.geometry.contains(point)].index
+        if len(index) == 0:
+            return None
+        return self.__getitem__(index[0])
 
 
 class TrainGURSDataset(GURSDataset, torch.utils.data.Dataset):

@@ -1,19 +1,18 @@
 import os
 import torch
 import json
-import torchvision.transforms.functional as F
 
 from ..utils import load_image, get_sorted_imgpaths
-from .base import ResizeCenterCropMixin
 
 
-class GESQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
+class GESQueryImages(torch.utils.data.Dataset):
     """
     Query image are images generated from a GES trajectory.
     """
 
-    def __init__(self, root, resize=None, center_crop=None):
-        super().__init__(resize=resize, center_crop=center_crop)
+    def __init__(self, root, transforms=None):
+        super().__init__()
+        self.transforms = transforms
         self.root = root
         self.crs = "EPSG:4326"
 
@@ -33,7 +32,8 @@ class GESQueryImages(torch.utils.data.Dataset, ResizeCenterCropMixin):
 
     def __getitem__(self, index):
         img = load_image(self.query_images[index])
-        img = self.resize_centercrop(img)
+        if self.transforms is not None:
+            img = self.transforms(img)
         img = img / 255.0
         filename = os.path.basename(self.query_images[index])
         lon = self.metadata["cameraFrames"][index]["coordinate"]["longitude"]

@@ -1,0 +1,36 @@
+ROTREF_EXP: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/siglipmodel/VPAir/contrastive_dinov3_huge
+# loaddir: &loaddir /storage/datasets/AerialLoc/Drone2Sat/vdbs/siglipmodel/VPAir/first
+
+model:
+  class_path: geoloc.models.contrastive.ContrastiveModel
+  load_checkpoint: /home/grega/geoloc/logs/checkpoints/contrastivemodel/VPAir/contrastivemodel_ds:VPAirTrainDataset_ep:200_prec:16-mixed_20260113_161755/epoch=199-step=011800.ckpt
+
+dataset:
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    include_distractors: False
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: [504, 504]
+          # - class_path: geoloc.data.transforms.CircleMaskCrop
+    # transforms:
+    #   class_path: torchvision.transforms.Compose
+    #   init_args:
+    #     transforms:
+    #       - class_path: torchvision.transforms.Resize
+    #         init_args:
+    #           size: [504, 504]
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 8448
+    distfn: cosine
+    norm_vec: True

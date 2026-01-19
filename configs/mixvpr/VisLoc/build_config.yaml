@@ -1,0 +1,26 @@
+ROTREF_EXP: False
+
+model:
+  class_path: geoloc.relatedwork.mixvpr.MixVPRModel
+  checkpoint: /home/grega/geoloc/logs/checkpoints/MixVPR/VisLoc/MixVPR_VisLoc_MixVPRResNetBackbone_N-align=False_lr=6e-05_bs=8_ep=10_20251107_114746-epoch=09-step=002360.ckpt
+
+dataset:
+  class_path: geoloc.data.datasets.VisLoc.VisLocReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/UAV_VisLoc/
+    flight_idx: 1
+    tile_size: 1000
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: 504
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim: 8448
+    distfn: cosine
+    norm_vec: True

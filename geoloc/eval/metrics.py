@@ -72,6 +72,56 @@ def calculate_intersections(qry, benchmark_top_k, inds, ref_image_dataset):
     return gt_pos, intersection_tps
 
 
+def first_true_index(bool_arr):
+    """Return the 0-based index of the first True, or None if none."""
+    if len(bool_arr) == 0:
+        return None
+    idx = np.argmax(bool_arr)
+    return int(idx) if bool_arr[idx] else None
+
+def safe_rank1(tp_flags):
+    """Return 1-based rank of first TP, or None if none."""
+    idx0 = first_true_index(tp_flags)
+    return (idx0 + 1) if idx0 is not None else None
+
+def rank1_or_sentinel(tp_flags, sentinel=999):
+    """Return rank1 (1-based) or a large sentinel for failures (sortable)."""
+    r1 = safe_rank1(tp_flags)
+    return sentinel if r1 is None else r1
+
+def reciprocal_rank_from_rank1(rank1):
+    """Reciprocal Rank from 1-based rank; 0.0 if None."""
+    return 0.0 if (rank1 is None) else 1.0 / rank1
+
+def tp_at_k(tp_flags, k):
+    """Count of TPs among the top-k."""
+    k = min(k, len(tp_flags))
+    return int(np.sum(tp_flags[:k]))
+
+def hit_at_k(tp_flags, k):
+    """Binary hit among top-k (your Recall@K)."""
+    k = min(k, len(tp_flags))
+    return 1 if np.any(tp_flags[:k]) else 0
+
+def average_precision(tp_flags):
+    """
+    AP for a single ranked list: mean precision at TP ranks.
+    If no TPs, returns 0.0.
+    """
+    tp_positions = np.where(tp_flags)[0]
+    if tp_positions.size == 0:
+        return 0.0
+
+    precisions = []
+    tp_cum = 0
+    for i, is_tp in enumerate(tp_flags):
+        if is_tp:
+            tp_cum += 1
+            precisions.append(tp_cum / (i + 1))
+    return float(np.mean(precisions))
+
+
+
 # def calculate_intersections(qry, benchmark_top_k, inds, ref_image_dataset):
 # 	gt_pos = []
 # 	intersection_tps = []

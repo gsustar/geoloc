@@ -1,0 +1,18 @@
+VISUALIZE_TOP_K: True
+
+every_n: 1
+benchmark_top_k: [1, 5, 10, 25, 50, 100]
+
+dataset:
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetQueryImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    soft_positive_offset: 3
+    north_align: True
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: 504

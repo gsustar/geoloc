@@ -5,6 +5,7 @@ import torch
 import torchvision
 from typing import List
 from natsort import natsorted
+import numpy as np
 
 import torchvision.transforms.functional as F
 
@@ -146,6 +147,16 @@ def collate_with_geometry(batch):
         for key in elem:
             if key == "geometry":
                 collated[key] = [sample[key] for sample in batch]
+            elif key == "gt_pos" and all([isinstance(x[key], np.ndarray) for x in batch]):
+                maxn = max([sample[key].shape[0] for sample in batch])
+                padded = []
+                for sample in batch:
+                    pad_size = maxn - sample[key].shape[0]
+                    padded_tensor = torch.from_numpy(
+                        np.concatenate([sample[key], sample[key][-1].repeat(max(0, pad_size))], axis=0)
+                    )
+                    padded.append(padded_tensor)
+                collated[key] = torch.stack(padded, dim=0)
             else:
                 collated[key] = default_collate([sample[key] for sample in batch])
         return collated

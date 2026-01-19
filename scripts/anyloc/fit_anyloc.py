@@ -13,7 +13,6 @@ from geoloc.config_parser import load_config, save_config, class_from_config
 from geoloc.utils import DEBUG
 from geoloc.data.utils import collate_with_geometry
 
-
 def create_argparse():
     parser = argparse.ArgumentParser(description="AnyLoc Vector Database Builder")
     parser.add_argument("--config", type=str, help="Path to the configuration file")
@@ -37,7 +36,7 @@ def fit_anyloc(config, batchsize=16):
         collate_fn=collate_with_geometry,
     )
 
-    anyloc = class_from_config(config.anyloc).to(device)
+    anyloc = class_from_config(config.model).to(device)
 
     print("Extracting features with backbone...")
     features = []
