@@ -1,4 +1,5 @@
 ROTREF_EXP: False
+SAVE_REF_SALAD_MATRIX: True
 
 savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/siglipmodel/VPAir/contrastive_dinov3_huge
 # loaddir: &loaddir /storage/datasets/AerialLoc/Drone2Sat/vdbs/siglipmodel/VPAir/first

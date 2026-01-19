@@ -105,7 +105,7 @@ class SALAD(nn.Module):
         # Dustbin parameter z
         self.dust_bin = nn.Parameter(torch.tensor(1.0))
 
-    def forward(self, x):
+    def forward(self, x, return_matrix=False):
         """
         x (tuple): A tuple containing two elements, f and t.
                 (torch.Tensor): The feature tensors (t_i) [B, C, H // 14, W // 14].
@@ -126,6 +126,9 @@ class SALAD(nn.Module):
         # Normalize to maintain mass
         p = p[:, :-1, :]
 
+        if return_matrix:
+            out_p = p.clone().cpu().detach()
+
         p = p.unsqueeze(1).repeat(1, self.cluster_dim, 1, 1)
         f = f.unsqueeze(2).repeat(1, 1, self.num_clusters, 1)
 
@@ -136,5 +139,8 @@ class SALAD(nn.Module):
             ],
             dim=-1,
         )
+        f = nn.functional.normalize(f, p=2, dim=-1)
 
-        return nn.functional.normalize(f, p=2, dim=-1)
+        if return_matrix:
+            return f, out_p
+        return f

@@ -67,6 +67,11 @@ class VectorDatabase:
             self.add(x_buffer)
             buffer.clear()
 
+    def save_ref_salad_matrix(self, savedir: str, filename: str, salad_matrix: torch.Tensor):
+        os.makedirs(savedir, exist_ok=True)
+        salad_path = os.path.join(savedir, filename)
+        np.save(salad_path, salad_matrix.cpu().numpy())
+
     @torch.no_grad()
     def build(
         self,
@@ -76,6 +81,8 @@ class VectorDatabase:
         device="cpu",
         buffer_size=6000,
         verbose=True,
+        save_salad_matrix=False,
+        salad_matrix_savedir=None,
         **kwargs
     ):
         if rotation_angles is None:
@@ -88,9 +95,18 @@ class VectorDatabase:
                     break
                 image = ref["image"].to(device)
                 image = TF.rotate(image, theta)
-                model_out = model(image)
+                model_args = {}
+                if save_salad_matrix:
+                    model_args["return_matrix"] = True
+                model_out = model(image, **model_args)
                 x = model_out["out"]
                 model_theta = model_out.get("theta", None)
+                salad_matrix = model_out.get("salad_matrix", None)
+
+                if salad_matrix is not None and save_salad_matrix:
+                    assert salad_matrix_savedir is not None, "salad_matrix_savedir must be provided to save salad matrices"
+                    self.save_ref_salad_matrix(salad_matrix_savedir, f"salad_matrix_ref{i:05d}.npy", salad_matrix)
+
                 if model_theta is not None:
                     self.theta_buffer.append(model_theta.cpu())
                 if self.norm_vec:

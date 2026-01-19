@@ -12,6 +12,21 @@ from ..vprmodel import VPRModel
 class SALADModel(VPRModel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+    def forward(self, x, return_matrix=False):
+        BS, ch, h, w = x.shape
+        out = dict()
+        if self.rotator is not None:
+            x, theta = self.rotator(x).values()
+            out["theta"] = theta
+        x = self.backbone(x)
+        if return_matrix:
+            x, salad_matrix = self.aggregator(x, return_matrix=return_matrix)
+            out["salad_matrix"] = salad_matrix
+        else:
+            x = self.aggregator(x)
+        out["out"] = x
+        return out
     
     # def load_from_legacy_checkpoint(self, checkpoint_path):
     #     self.load_state_dict(torch.load(checkpoint_path), strict=True)

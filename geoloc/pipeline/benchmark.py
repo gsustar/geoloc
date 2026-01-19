@@ -78,6 +78,7 @@ def benchmark_main(vdbdir: str, traj_config):
     visualize_vlad = getattr(traj_config, "VISUALIZE_VLAD", False) and supports_vlad_visualization(model_type)
     visualize_top_k = getattr(traj_config, "VISUALIZE_TOP_K", False)
     visualize_heatmap = getattr(traj_config, "VISUALIZE_HEATMAP", False)
+    save_salad_matrix = getattr(traj_config, "SAVE_SALAD_MATRIX", False)
     rotexp_thetas = [0, 90, 180, 270] if getattr(build_config, "ROTREF_EXP", False) else [0]
     rottraj_thetas = [0, 90, 180, 270] if getattr(traj_config, "ROTTRAJ_EXP", False) else [0]
     benchmark_recall_at_xmeters = getattr(traj_config, "benchmark_recall_at_xmeters", [])
@@ -96,7 +97,7 @@ def benchmark_main(vdbdir: str, traj_config):
         lon_key=lon_key, lat_key=lat_key, benchmark_recall_at_xmeters=benchmark_recall_at_xmeters, 
         benchmark_top_k=benchmark_top_k, rotexp_thetas=rotexp_thetas, rottraj_thetas=rottraj_thetas, 
         visualize_vlad=visualize_vlad, visualize_top_k=visualize_top_k, visualize_heatmap=visualize_heatmap, 
-        every_n=every_n, savedir=savedir, device=device,
+        every_n=every_n, savedir=savedir, device=device, save_salad_matrix=save_salad_matrix
     )
 
     num_qry_images = benchmark_results["num_qry_images"]
@@ -205,7 +206,7 @@ def benchmark_loop(
     benchmark_recall_at_xmeters=[100, 250, 500, 1000], 
     benchmark_top_k=[1, 5, 10, 25, 50, 100], rotexp_thetas=[0], rottraj_thetas=[0], 
     visualize_vlad=False, visualize_top_k=False, visualize_heatmap=False, every_n=1, 
-    savedir=None, device="cpu"
+    savedir=None, device="cpu", save_salad_matrix=False,
 ):
     
     if is_distance_based is None:
@@ -260,7 +261,7 @@ def benchmark_loop(
                 is_distance_based=is_distance_based, lon_key=lon_key, lat_key=lat_key, theta=theta, theta_ix=j,
                 benchmark_recall_at_xmeters=benchmark_recall_at_xmeters, benchmark_top_k=benchmark_top_k,
                 rotexp_thetas=rotexp_thetas, visualize_vlad=visualize_vlad, visualize_top_k=visualize_top_k,
-                visualize_heatmap=visualize_heatmap, savedir=savedir, device=device
+                visualize_heatmap=visualize_heatmap, savedir=savedir, device=device, save_salad_matrix=save_salad_matrix,
             )
             # predicted_trajectory[i] = benchmark_results["predicted_coordinates"]
             if is_distance_based:
@@ -380,7 +381,7 @@ def benchmark_single(
     model, model_type, vdb, qry_image_dataset, ref_image_dataset, vdbdir, dataset_type, query_ix,
     is_distance_based=None, lon_key=None, lat_key=None, theta=0, theta_ix=0, benchmark_recall_at_xmeters=[100, 250, 500, 1000],
     benchmark_top_k=[1, 5, 10, 25, 50, 100], rotexp_thetas=[0], visualize_vlad=False, 
-    visualize_top_k=False, visualize_heatmap=False, savedir=None, device=None
+    visualize_top_k=False, visualize_heatmap=False, savedir=None, device=None, save_salad_matrix=False
 ):
     if is_distance_based is None:
         is_distance_based = dataset_type in DISTANCE_BASED_DATASETS
@@ -399,6 +400,8 @@ def benchmark_single(
     model_args = {}
     if visualize_vlad:
         model_args["return_residuals"] = True
+    if save_salad_matrix:
+        model_args["return_matrix"] = True
     if model_type in ["SegVLAD", "Mast3rRetrievalModel"]:
         model_args["idx"] = query_ix + theta_ix * len(qry_image_dataset)
 
@@ -410,7 +413,12 @@ def benchmark_single(
     x_rotator_theta = outdict.get("theta", None)
     if x_rotator_theta is not None:
         x_rotator_theta = x_rotator_theta.item()
+
     qry_residuals = outdict.get("qry_residuals", None)
+
+    salad_matrix = outdict.get("salad_matrix", None)
+    if salad_matrix is not None:
+        salad_matrix = salad_matrix.cpu().detach()
     
     search_top_k = [vdb.size()] if visualize_heatmap else benchmark_top_k
 
@@ -525,20 +533,20 @@ def benchmark_single(
         #         # recalls[h] += 1
     
     # Visualizations
+    K_main = 10
+    # hitK = hit_at_k(tp_flags, K_main)
+    tpK  = tp_at_k(tp_flags, K_main)
+    ap10000 = int(round(ap * 10000))
+    query_id = qry.get("id", f"q{query_ix:05d}")
+    filename = (
+        f"AP{ap10000:05d}_R{rank1_sortable:03d}_TP@{K_main}-{tpK:02d}_{query_id}.png"
+    )
     if visualize_top_k:
         rotator_ref_thetas_path = os.path.join(vdbdir, f"thetas.npy")
         rotator_ref_thetas = None
         if os.path.exists(rotator_ref_thetas_path):
             rotator_ref_thetas = np.load(rotator_ref_thetas_path).reshape(-1).tolist()
 
-        K_main = 10
-        hitK = hit_at_k(tp_flags, K_main)
-        tpK  = tp_at_k(tp_flags, K_main)
-        ap10000 = int(round(ap * 10000))
-        query_id = qry.get("id", f"q{query_ix:05d}")
-        filename = (
-            f"AP{ap10000:05d}_R{rank1_sortable:03d}_TP@{K_main}-{tpK:02d}_{query_id}.png"
-        )
         vis_kwargs = {
             "query_image": image,
             "query_ix": query_ix,
@@ -595,6 +603,12 @@ def benchmark_single(
                 # rotref_exp=getattr(build_config, "ROTREF_EXP", False),
                 rotref_exp=True if rotexp_thetas != [0] else False,
             )
+    if save_salad_matrix and salad_matrix is not None:
+        salad_savedir = os.path.join(savedir, "qry_salad_matrices")
+        salad_filename = filename.replace(".png", ".npy")
+        os.makedirs(salad_savedir, exist_ok=True)
+        salad_path = os.path.join(salad_savedir, salad_filename)
+        np.save(salad_path, salad_matrix.numpy())
 
     return dict(
         pipeline_time=pipeline_time,
