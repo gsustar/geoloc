@@ -4,3 +4,4 @@ notebooks/
 visualizations/
 wandb/
 lightning_logs/
+experiments/

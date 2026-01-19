@@ -500,7 +500,6 @@ def benchmark_single(
         # }
         
         gt_pos = qry["gt_pos"]
-
         retrieved = (inds[0, :] % len(ref_image_dataset)).astype(int)
         gt_set = set(gt_pos if isinstance(gt_pos, (list, tuple, np.ndarray)) else [gt_pos])
 
@@ -538,7 +537,7 @@ def benchmark_single(
         ap10000 = int(round(ap * 10000))
         query_id = qry.get("id", f"q{query_ix:05d}")
         filename = (
-            f"H{hitK}_R{rank1_sortable:03d}_TP{K_main}{tpK:02d}_AP{ap10000:05d}_{query_id}.jpg"
+            f"AP{ap10000:05d}_R{rank1_sortable:03d}_TP@{K_main}-{tpK:02d}_{query_id}.png"
         )
         vis_kwargs = {
             "query_image": image,
