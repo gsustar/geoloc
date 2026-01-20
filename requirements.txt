@@ -1,0 +1,34 @@
+tqdm
+numpy
+pandas
+matplotlib
+opencv-python
+scikit-learn
+scipy
+prettytable
+psutil
+natsort
+
+timm
+kornia
+einops
+lightning
+fast-pytorch-kmeans
+xformers==0.0.32.post1
+
+# geospatial libraries
+geopandas
+shapely
+pytransform3d
+rasterio
+
+# pretrained backbones
+transformers==4.57.3
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0
+torchmetrics==1.8.2
+torchvision==0.23.0
+
+wandb
+huggingface_hub

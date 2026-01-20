@@ -6,8 +6,13 @@ from tqdm import tqdm
 from torch.nn import functional as F
 import torchvision.transforms.functional as TF
 
-from asmk import asmk_method
-from asmk import io_helpers
+try:
+    from asmk import asmk_method
+    from asmk import io_helpers
+except ImportError:
+    asmk_method = None
+    io_helpers = None
+    print("Warning: asmk package not found. Mast3rASMKVectorDatabase will not work.")
 
 from ..config_parser import class_from_config
 from ..utils import DEBUG

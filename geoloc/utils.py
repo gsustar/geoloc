@@ -128,6 +128,7 @@ def create_run_name(config):
                 backbone_name = getattr(
                     config.model.init_args.backbone.init_args, k, None)
                 if backbone_name is not None:
+                    backbone_name = backbone_name.replace("/", "-")
                     run_name += f"bb:{backbone_name}_"
                     break
         if hasattr(config.model.init_args, "aggregator"):
