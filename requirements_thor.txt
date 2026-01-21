@@ -1,0 +1,33 @@
+tqdm
+numpy==1.26.4
+pandas
+matplotlib
+opencv-python<=4.10.0
+scikit-learn
+scipy
+prettytable
+psutil
+natsort
+
+timm
+kornia
+einops
+lightning
+fast-pytorch-kmeans
+xformers @ https://pypi.jetson-ai-lab.io/jp6/cu128/+f/947/dd6ce4356e5b7/xformers-0.0.30+037cc1a.d20250209-cp310-cp310-linux_aarch64.whl
+
+# geospatial libraries
+geopandas
+shapely
+## pytransform3d
+rasterio
+
+# pretrained backbones
+transformers==4.57.3
+
+torch @ https://download.pytorch.org/whl/cu130/torch-2.10.0%2Bcu130-cp310-cp310-manylinux_2_28_aarch64.whl
+torchvision @ https://download.pytorch.org/whl/cu130/torchvision-0.25.0%2Bcu130-cp310-cp310-manylinux_2_28_aarch64.whl
+torchmetrics==1.8.2
+
+wandb
+huggingface_hub
