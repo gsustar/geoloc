@@ -6,14 +6,21 @@ conda create -n geoloc python=3.10
 conda activate geoloc
 
 # install requirements
-
 ### (For most cases)
 pip install -r requirements.txt         
 conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.13.1
 
-### (For NVIDIA Jetson AGX Thor)
+### (For NVIDIA Jetson AGX Thor) - [ARM64 with Jetpack 7.0]
 pip install -r requirements_thor.txt
 conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
+
+### (For NVIDIA Jetson AGX Orin) - [ARM64 with Jetpack 6.2]
+pip install -r requirements_orin.txt
+conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
+```
+```bash
+# If you want to install as pip package
+pip install -e .
 ```
 
 ## Optional 
@@ -48,9 +55,4 @@ wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge
 ### For running SegVLAD/RevisitAnything
 ```bash
 pip install git+https://github.com/facebookresearch/segment-anything.git
-```
-
-```bash
-# If you want to install as pip package
-pip install -e .
 ```
