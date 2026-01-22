@@ -10,11 +10,11 @@ conda activate geoloc
 pip install -r requirements.txt         
 conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.13.1
 
-### (For NVIDIA Jetson AGX Thor) - [ARM64 with Jetpack 7.0]
+### (For NVIDIA Jetson AGX Thor) - [ARM64 with Jetpack 7.0 and CUDA 13.0]
 pip install -r requirements_thor.txt
 conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
 
-### (For NVIDIA Jetson AGX Orin) - [ARM64 with Jetpack 6.2]
+### (For NVIDIA Jetson AGX Orin) - [ARM64 with Jetpack 6.2 and CUDA 12.6]
 pip install -r requirements_orin.txt
 conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
 ```
@@ -22,6 +22,11 @@ conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
 # If you want to install as pip package
 pip install -e .
 ```
+
+### **! ! ! NOTE - Installing torch and torchvision on AGX Orin ! ! !**
+https://forums.developer.nvidia.com/t/pytorch-2-8-0-on-jetson-orin-nano-importerror-libcudss-so-0-not-found/346195
+
+The prebuilt wheels for newer version of torch and torchvision (>2.8.0) for Jetpack 6.2, CUDA 12.6, don't include the CuDSS library, so you have to install it manully following [this steps](https://developer.nvidia.com/cudss-downloads?target_os=Linux&target_arch=aarch64-jetson&Compilation=Native&Distribution=Ubuntu&target_version=22.04&target_type=deb_local).
 
 ## Optional 
 ### For running Mast3r retrieval

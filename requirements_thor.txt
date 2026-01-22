@@ -14,7 +14,8 @@ kornia
 einops
 lightning
 fast-pytorch-kmeans
-xformers @ https://pypi.jetson-ai-lab.io/jp6/cu128/+f/947/dd6ce4356e5b7/xformers-0.0.30+037cc1a.d20250209-cp310-cp310-linux_aarch64.whl
+# xformers @ https://pypi.jetson-ai-lab.io/jp6/cu128/+f/947/dd6ce4356e5b7/xformers-0.0.30+037cc1a.d20250209-cp310-cp310-linux_aarch64.whl
+xformers @ https://pypi.jetson-ai-lab.io/sbsa/cu130/+f/468/96491592d19ee/xformers-0.0.33.post1-cp39-abi3-linux_aarch64.whl
 
 # geospatial libraries
 geopandas
