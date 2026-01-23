@@ -38,14 +38,20 @@ class VPRModel(L.LightningModule):
             []
         )  # we will keep track of the % of trivial pairs/triplets at the loss level
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         BS, ch, h, w = x.shape
         out = dict()
         if self.rotator is not None:
             x, theta = self.rotator(x).values()
             out["theta"] = theta
         x = self.backbone(x)
-        x = self.aggregator(x)
+        return_salad_matrix = kwargs.get("return_salad_matrix", False)
+        agg_out = self.aggregator(x, return_salad_matrix=return_salad_matrix)
+        if isinstance(agg_out, tuple):
+            x, salad_matrix = agg_out
+            out["salad_matrix"] = salad_matrix
+        else:
+            x = agg_out
         out["out"] = x
         return out
 
@@ -177,7 +183,7 @@ class VPRModel(L.LightningModule):
                 or name.startswith("segmentor.") 
                 or name.startswith("backbone.")
             ):
-                if not param.requires_grad: #!!! Remember to retrain all contrastive models so that you save also relevant backbone weights
+                if not param.requires_grad:
                     keys_to_remove.append(name)
         for key in keys_to_remove:
             if key in state_dict:

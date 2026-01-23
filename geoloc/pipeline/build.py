@@ -46,7 +46,7 @@ def build_vdb(config, batchsize: int = 1):
         rotation_angles=[0, 90, 180, 270] if getattr(config, "ROTREF_EXP", False) else None,
         device=device,
         save_salad_matrix=getattr(config, "SAVE_REF_SALAD_MATRIX", False),
-        salad_matrix_savedir=os.path.join(vdbdir, "salad_matrices")
+        salad_matrix_savedir=os.path.join(vdbdir, "ref_salad_matrices")
     )
 
     print("Saving database...")

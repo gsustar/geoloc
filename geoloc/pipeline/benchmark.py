@@ -401,7 +401,7 @@ def benchmark_single(
     if visualize_vlad:
         model_args["return_residuals"] = True
     if save_salad_matrix:
-        model_args["return_matrix"] = True
+        model_args["return_salad_matrix"] = True
     if model_type in ["SegVLAD", "Mast3rRetrievalModel"]:
         model_args["idx"] = query_ix + theta_ix * len(qry_image_dataset)
 
@@ -608,7 +608,7 @@ def benchmark_single(
         salad_filename = filename.replace(".png", ".npy")
         os.makedirs(salad_savedir, exist_ok=True)
         salad_path = os.path.join(salad_savedir, salad_filename)
-        np.save(salad_path, salad_matrix.numpy())
+        np.save(salad_path, salad_matrix.cpu().numpy())
 
     return dict(
         pipeline_time=pipeline_time,
