@@ -37,6 +37,9 @@ def create_argparse():
     parser.add_argument(
         "--traj_config", type=str, required=True, help="Path to the trajectory config file"
     )
+    parser.add_argument(
+        "--disable_fp16", action="store_true", help="Disable FP16 precision during benchmarking"
+    )
     return parser
 
 def get_savedir(loaddir: str):
@@ -55,7 +58,7 @@ def get_position_keys(dataset_type: str) -> tuple:
         return ("east", "north")
     return ("lon", "lat")
 
-def benchmark_main(vdbdir: str, traj_config):
+def benchmark_main(vdbdir: str, traj_config, use_fp16=True):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     build_config = load_config(os.path.join(vdbdir, "build_config.yaml"))
     model = load_model(build_config).eval().to(device)
@@ -97,7 +100,7 @@ def benchmark_main(vdbdir: str, traj_config):
         lon_key=lon_key, lat_key=lat_key, benchmark_recall_at_xmeters=benchmark_recall_at_xmeters, 
         benchmark_top_k=benchmark_top_k, rotexp_thetas=rotexp_thetas, rottraj_thetas=rottraj_thetas, 
         visualize_vlad=visualize_vlad, visualize_top_k=visualize_top_k, visualize_heatmap=visualize_heatmap, 
-        every_n=every_n, savedir=savedir, device=device, save_salad_matrix=save_salad_matrix
+        every_n=every_n, savedir=savedir, device=device, save_salad_matrix=save_salad_matrix, use_fp16=use_fp16,
     )
 
     num_qry_images = benchmark_results["num_qry_images"]
@@ -206,7 +209,7 @@ def benchmark_loop(
     benchmark_recall_at_xmeters=[100, 250, 500, 1000], 
     benchmark_top_k=[1, 5, 10, 25, 50, 100], rotexp_thetas=[0], rottraj_thetas=[0], 
     visualize_vlad=False, visualize_top_k=False, visualize_heatmap=False, every_n=1, 
-    savedir=None, device="cpu", save_salad_matrix=False,
+    savedir=None, device="cpu", save_salad_matrix=False, use_fp16=True,
 ):
     
     if is_distance_based is None:
@@ -262,6 +265,7 @@ def benchmark_loop(
                 benchmark_recall_at_xmeters=benchmark_recall_at_xmeters, benchmark_top_k=benchmark_top_k,
                 rotexp_thetas=rotexp_thetas, visualize_vlad=visualize_vlad, visualize_top_k=visualize_top_k,
                 visualize_heatmap=visualize_heatmap, savedir=savedir, device=device, save_salad_matrix=save_salad_matrix,
+                use_fp16=use_fp16,
             )
             # predicted_trajectory[i] = benchmark_results["predicted_coordinates"]
             if is_distance_based:
@@ -364,7 +368,7 @@ def benchmark_single(
     model, model_type, vdb, qry_image_dataset, ref_image_dataset, vdbdir, dataset_type, query_ix,
     is_distance_based=None, lon_key=None, lat_key=None, theta=0, theta_ix=0, benchmark_recall_at_xmeters=[100, 250, 500, 1000],
     benchmark_top_k=[1, 5, 10, 25, 50, 100], rotexp_thetas=[0], visualize_vlad=False, 
-    visualize_top_k=False, visualize_heatmap=False, savedir=None, device=None, save_salad_matrix=False
+    visualize_top_k=False, visualize_heatmap=False, savedir=None, device=None, save_salad_matrix=False, use_fp16=True,
 ):
     if is_distance_based is None:
         is_distance_based = dataset_type in DISTANCE_BASED_DATASETS
@@ -389,7 +393,7 @@ def benchmark_single(
     if requires_arg(model.forward, "idx"):
         model_args["idx"] = query_ix + theta_ix * len(qry_image_dataset)
 
-    with torch.autocast(device_type=device.type, dtype=torch.float16):
+    with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_fp16):
         pipeline_start_time = time.time()
         outdict = model(image.unsqueeze(0), **model_args)
         pipeline_time = time.time() - pipeline_start_time
@@ -628,7 +632,8 @@ def main():
     parser = create_argparse()
     args = parser.parse_args()
     traj_config = load_config(args.traj_config)
-    benchmark_main(args.vdbdir, traj_config)
+    print(not args.disable_fp16)
+    benchmark_main(args.vdbdir, traj_config, use_fp16=not args.disable_fp16)
 
 
 if __name__ == "__main__":
