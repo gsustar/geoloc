@@ -20,11 +20,11 @@ from geoloc.visualize import (
 )
 from geoloc.data.vdb import load_database
 from geoloc.config_parser import load_config, save_config, class_from_config
-from geoloc.utils import DEBUG, load_model, get_model_type, get_dataset_type
+from geoloc.utils import DEBUG, load_model, get_model_type, get_dataset_type, requires_arg
 from geoloc.eval.metrics import calculate_distances, calculate_intersections, hit_at_k, tp_at_k, safe_rank1, rank1_or_sentinel, reciprocal_rank_from_rank1, average_precision
-from geoloc.eval.utils import write_resdict_to_file, write_pretty_table
+from geoloc.eval.utils import write_resdict_to_file, write_pretty_table, segvlad_get_matches
 
-INDEX_BASED_DATASETS = ["vpair", "alto"]
+INDEX_BASED_DATASETS = ["vpair", "alto", "ortholoc"]
 DISTANCE_BASED_DATASETS = ["visloc", "gurs"]
 
 def create_argparse():
@@ -402,7 +402,8 @@ def benchmark_single(
         model_args["return_residuals"] = True
     if save_salad_matrix:
         model_args["return_salad_matrix"] = True
-    if model_type in ["SegVLAD", "Mast3rRetrievalModel"]:
+    # if model_type in ["SegVLAD", "Mast3rRetrievalModel"]:
+    if requires_arg(model.forward, "idx"):
         model_args["idx"] = query_ix + theta_ix * len(qry_image_dataset)
 
     pipeline_start_time = time.time()
@@ -423,11 +424,20 @@ def benchmark_single(
     search_top_k = [vdb.size()] if visualize_heatmap else benchmark_top_k
 
     search_args = {}
-    if model_type in ["SegVLAD", "Mast3rRetrievalModel"]:
+    if model_type in ["Mast3rRetrievalModel"]:
         search_args["imids"] = outdict["ids"].cpu().numpy()
+
     db_search_start_time = time.time()
     dists, inds = vdb.search(qu=x, k=max(search_top_k), **search_args)
     db_search_time = time.time() - db_search_start_time
+
+    if model_type in ["SegVLAD"]:
+        if len(vdb.imInd_buffer) > 0: # necessary for validation during training
+            ref_imInds = vdb.imInd_buffer
+        else:
+            ref_imInds = torch.load(os.path.join(vdbdir, "segvlad_imInds.npy")).numpy()
+        # pred, pred_score = segvlad_get_matches(dists, inds, ref_imInds, n=max(benchmark_top_k))
+        inds, dists = segvlad_get_matches(dists, inds, ref_imInds, n=max(benchmark_top_k)) # !! this is not distances, just accumulated similarities
     
     curr_iter_memory_peak = bytes_to_gb(tracemalloc.get_traced_memory()[1])
     curr_iter_vram_peak = bytes_to_gb(torch.cuda.max_memory_allocated())

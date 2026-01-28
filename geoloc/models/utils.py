@@ -34,6 +34,17 @@ def dino_processor(x: torch.Tensor, patch_size: int, return_latent_size: bool = 
         return x, latent_size
     return x
 
+def torch_trace_friendly_dino_processor(x: torch.Tensor, patch_size: int):
+    c, h, w = x.shape[-3:]
+    new_h, new_w = (h // patch_size) * patch_size, (w // patch_size) * patch_size
+    mean = torch.tensor([0.485, 0.456, 0.406], device=x.device).view(1, c, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225], device=x.device).view(1, c, 1, 1)
+    x = (x - mean) / std
+    top = (h - new_h) // 2
+    left = (w - new_w) // 2
+    x = x[:, :, top:top + new_h, left:left + new_w]
+    return x
+
 
 def remove_registers_and_cls_token(backbone_features: torch.Tensor, latent_size: tuple, return_cls_tokens: bool = False):
     num_feat_tkns = latent_size[0] * latent_size[1]

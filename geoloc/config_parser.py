@@ -30,17 +30,62 @@ class Loader(yaml.SafeLoader):
             self._root = os.path.curdir
         super().__init__(stream)
 
+def get_by_path(data: dict, path: str):
+    """Get value from nested dict using dot-separated path."""
+    cur = data
+    for part in path.split('.'):
+        cur = cur[part]
+    return cur
+
 def construct_include(loader: Loader, node: yaml.Node) -> Any:
-    """Include file referenced at node."""
-    filename = os.path.abspath(os.path.join(loader._root, loader.construct_scalar(node)))
+    if isinstance(node, yaml.ScalarNode):
+        # Backward-compatible: !include filename.yaml
+        spec = {"file": loader.construct_scalar(node)}
+    else:
+        # !include {file: ..., keys: ...}
+        spec = loader.construct_mapping(node, deep=True)
+
+    filename = os.path.abspath(os.path.join(loader._root, spec["file"]))
     extension = os.path.splitext(filename)[1].lstrip('.')
-    with open(filename, 'r') as f:
-        if extension in ('yaml', 'yml'):
-            return yaml.load(f, Loader)
-        elif extension in ('json', ):
-            return json.load(f)
+
+    with open(filename, "r") as f:
+        if extension in ("yaml", "yml"):
+            data = yaml.load(f, Loader)
+        elif extension == "json":
+            data = json.load(f)
         else:
-            return ''.join(f.readlines())
+            return f.read()
+
+    # No key filtering → return whole file
+    if "keys" not in spec:
+        return data
+
+    # Filter keys
+    result = {}
+    for key in spec["keys"]:
+        value = get_by_path(data, key)
+
+        # Reconstruct nested structure
+        cur = result
+        parts = key.split(".")
+        for p in parts[:-1]:
+            cur = cur.setdefault(p, {})
+        cur[parts[-1]] = value
+
+    return result
+
+
+# def construct_include(loader: Loader, node: yaml.Node) -> Any:
+#     """Include file referenced at node."""
+#     filename = os.path.abspath(os.path.join(loader._root, loader.construct_scalar(node)))
+#     extension = os.path.splitext(filename)[1].lstrip('.')
+#     with open(filename, 'r') as f:
+#         if extension in ('yaml', 'yml'):
+#             return yaml.load(f, Loader)
+#         elif extension in ('json', ):
+#             return json.load(f)
+#         else:
+#             return ''.join(f.readlines())
 
 def _load_checkpoint_helper(value, checkpoint_path, nested_key=None):
     dirpath = os.path.dirname(checkpoint_path)

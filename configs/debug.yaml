@@ -77,9 +77,10 @@ logger: # WandbLogger config
   offline: False
   save_dir: /home/grega/geoloc/logs/
 
+
 build_config: !include
   file: contrastive/VPAir/contrastive_build.yaml
   keys:
     - vdb
     - dataset
-benchmark_config: !include contrastive_benchmark.yaml
+benchmark_config: !include contrastive/VPAir/contrastive_benchmark.yaml

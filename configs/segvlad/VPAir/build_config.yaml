@@ -1,20 +1,23 @@
 ROTREF_EXP: False
 
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/segvlad/VPAir/first
+
 model:
   class_path: geoloc.models.relatedwork.segvlad.SegVladModel
-  load_checkpoint: /storage/datasets/AerialLoc/Drone2Sat/ckpts/segvlad/VPAir/best.ckpt
+  # load_checkpoint: /storage/datasets/AerialLoc/Drone2Sat/ckpts/segvlad/VPAir/best.ckpt # TODO
 
 dataset:
-  # class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
-  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
+  # class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
   init_args:
     root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
     include_distractors: False
-    canonical_ori: True
 
 vdb:
   class_path: geoloc.data.vdb.VectorDatabase
   init_args:
-    vdim: 49152
-    distfn: cosine
+    vdim: 1024 # this is with dinov2-giant
+    # vdim: 40960 # this is with dinov3-h16plus 
+    distfn: l2
     norm_vec: True
+    faiss_gpu: True

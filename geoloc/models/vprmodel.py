@@ -14,7 +14,7 @@ class VPRModel(L.LightningModule):
         backbone,
         aggregator,
         rotator=None,
-        segmentor=None,
+        # segmentor=None,
         pca=None,
         optimizer=None,
         scheduler=None,
@@ -24,7 +24,7 @@ class VPRModel(L.LightningModule):
     ):
         super().__init__()
         self.rotator = rotator
-        self.segmentor = segmentor
+        # self.segmentor = segmentor
         self.backbone = backbone
         self.aggregator = aggregator
         self.pca = pca

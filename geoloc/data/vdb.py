@@ -1,6 +1,7 @@
 import os
 import torch
 import faiss
+import inspect 
 import numpy as np
 from tqdm import tqdm
 from torch.nn import functional as F
@@ -15,7 +16,7 @@ except ImportError:
     print("Warning: asmk package not found. Mast3rASMKVectorDatabase will not work.")
 
 from ..config_parser import class_from_config
-from ..utils import DEBUG
+from ..utils import DEBUG, requires_arg
 
 
 class VectorDatabase:
@@ -38,6 +39,7 @@ class VectorDatabase:
             self.faiss_index = faiss.index_cpu_to_gpu(res, 0, self.faiss_index)
         
         self.theta_buffer = []
+        self.imInd_buffer = []
 
     def add(self, vectors: torch.Tensor):
         if self.norm_vec:
@@ -65,6 +67,10 @@ class VectorDatabase:
         if len(self.theta_buffer) > 0:
             theta_savepath = os.path.join(savedir, "thetas.npy")
             np.save(theta_savepath, np.array(self.theta_buffer))
+        
+        if len(self.imInd_buffer) > 0:
+            imInd_savepath = os.path.join(savedir, "segvlad_imInds.npy")
+            np.save(imInd_savepath, np.array(self.imInd_buffer))
 
     def _flush_buffer(self, buffer):
         if buffer:
@@ -96,6 +102,7 @@ class VectorDatabase:
         buffer = []
         save_salad_matrix = kwargs.get("save_salad_matrix", False)
         salad_matrix_savedir = kwargs.get("salad_matrix_savedir", None)
+        requires_idx = requires_arg(model.forward, "idx")
 
         for theta in rotation_angles:
             for i, ref in enumerate(tqdm(ref_image_dataloader, disable=not verbose)):
@@ -103,9 +110,13 @@ class VectorDatabase:
                     break
                 image = ref["image"].to(device)
                 image = TF.rotate(image, theta)
-                model_args = {
-                    "return_salad_matrix": save_salad_matrix
-                }
+
+                model_args = {}
+                if save_salad_matrix:
+                    model_args["return_salad_matrix"] = True
+                if requires_idx:
+                    model_args["idx"] = i
+
                 model_out = model(image, **model_args)
                 x = model_out["out"]
 
@@ -113,6 +124,12 @@ class VectorDatabase:
                 if salad_matrix is not None and save_salad_matrix:
                     self.save_ref_salad_matrix(salad_matrix_savedir, i, salad_matrix)
 
+                imInds = model_out.get("imInds1_ind", None)
+                rgInds = model_out.get("regInds1_ind", None)
+                if imInds is not None and rgInds is not None:
+                    self.imInd_buffer.append(
+                        torch.tensor(list(zip(imInds, rgInds)))
+                    )
                 model_theta = model_out.get("theta", None)
                 if model_theta is not None:
                     self.theta_buffer.append(model_theta.cpu())
@@ -122,9 +139,12 @@ class VectorDatabase:
                 buffer.append(x)
                 if len(buffer) >= buffer_size:
                     self._flush_buffer(buffer)
+
         self._flush_buffer(buffer)
         if len(self.theta_buffer) > 0:
             self.theta_buffer = torch.cat(self.theta_buffer).numpy()
+        if len(self.imInd_buffer) > 0:
+            self.imInd_buffer = torch.cat(self.imInd_buffer).numpy()
 
 
 class Mast3rASMKVectorDatabase:

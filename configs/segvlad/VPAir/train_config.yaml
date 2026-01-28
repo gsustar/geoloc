@@ -1,11 +1,13 @@
-savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/segvlad/VPAir/debug
-
-fitstep: 5
-vlad_prefitted: /storage/datasets/AerialLoc/Drone2Sat/ckpts/anyloc_aerial_c_centers/c_centers.pt
-
 model:
   class_path: geoloc.models.relatedwork.segvlad.SegVLAD
   init_args:
+    desired_height: 600
+    desired_width: 800
+    vlad_checkpoint: /storage/datasets/AerialLoc/Drone2Sat/ckpts/anyloc_aerial_c_centers/c_centers.pt
+    sam_checkpoint: /storage/datasets/AerialLoc/Drone2Sat/ckpts/sam_vit_h_4b8939.pth
+    sam_model_type: vit_h
+    order: 3
+    sam_resize: True
     backbone:
       class_path: geoloc.models.backbones.AnyLocDINOv2Backbone
       init_args:
@@ -18,27 +20,21 @@ model:
         num_clusters: 32
         vlad_mode: hard
         desc_dim: 1536
-        cache_dir: *savedir
+        cache_dir: null
     pca:
       class_path: sklearn.decomposition.PCA
       init_args:
         n_components: 1024
         whiten: True
+        svd_solver: arpack
+    fit_step: 5
 
 dataset:
-  # class_path: geoloc.data.datasets.VPAir.VPArReferenceImages
-  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
+  # class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
   init_args:
     root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
     include_distractors: False
-    canonical_ori: False
-
-dataset:
-  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
-  init_args:
-    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
-    include_distractors: False
-    canonical_ori: True
 
 dataloader:
   batch_size: 1
@@ -47,9 +43,17 @@ dataloader:
 
 trainer: # Lightning Trainer config
   max_epochs: 1
-  accelerator: gpu
+  accelerator: 'gpu'
   devices: 1
+  num_sanity_val_steps: 0
 
 logger: # WandbLogger config
-  offline: True
+  offline: False
   save_dir: /home/grega/geoloc/logs/
+
+build_config: !include
+  file: build_config.yaml
+  keys:
+    - vdb
+    - dataset
+benchmark_config: !include benchmark_config.yaml

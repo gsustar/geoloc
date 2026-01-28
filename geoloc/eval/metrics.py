@@ -121,7 +121,6 @@ def average_precision(tp_flags):
     return float(np.mean(precisions))
 
 
-
 # def calculate_intersections(qry, benchmark_top_k, inds, ref_image_dataset):
 # 	gt_pos = []
 # 	intersection_tps = []

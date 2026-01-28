@@ -61,3 +61,7 @@ wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge
 ```bash
 pip install git+https://github.com/facebookresearch/segment-anything.git
 ```
+### For running on OrthoLoC dataset
+```bash
+# TODO
+```

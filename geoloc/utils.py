@@ -2,6 +2,7 @@ import os
 import math
 import torch
 import wandb
+import inspect
 import numpy as np
 import torchvision
 from pyproj import Transformer
@@ -92,7 +93,24 @@ def color_text(text, color="red"):
 #     model.my_config = model_config
 #     return model
 
-def load_model(config):
+def load_model_from_my_checkpoint(checkpoint_path: str):
+    dirpath = os.path.dirname(checkpoint_path)
+    if os.path.exists(os.path.join(dirpath, "train_config.yaml")):
+        train_config_path = os.path.join(dirpath, "train_config.yaml")
+        model_config = load_config(train_config_path).model
+    model_cls, init_args = class_from_config(model_config, instantiate=False)
+    model = model_cls.load_from_checkpoint(
+        checkpoint_path, strict=False, weights_only=False,
+        **init_args
+    )
+    model.my_config = model_config
+    return model
+
+def load_model(config=None, checkpoint_path: str = None):
+    assert (config is not None) != (checkpoint_path is not None), \
+        "Exactly one of config or checkpoint_path must be provided"
+    if checkpoint_path is not None:
+        return load_model_from_my_checkpoint(checkpoint_path)
     model = class_from_config(config.model)
     model.my_config = config.model
     return model
@@ -165,3 +183,18 @@ def create_run_name(config):
     run_name += f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     return run_name
+
+def requires_arg(func, arg_name):
+    sig = inspect.signature(func)
+    param = sig.parameters.get(arg_name)
+    
+    if param is None:
+        return False
+    
+    return (
+        param.default is inspect._empty
+        and param.kind not in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        )
+    )
