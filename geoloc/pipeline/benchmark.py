@@ -389,9 +389,10 @@ def benchmark_single(
     if requires_arg(model.forward, "idx"):
         model_args["idx"] = query_ix + theta_ix * len(qry_image_dataset)
 
-    pipeline_start_time = time.time()
-    outdict = model(image.unsqueeze(0), **model_args)
-    pipeline_time = time.time() - pipeline_start_time
+    with torch.autocast(device_type=device.type, dtype=torch.float16):
+        pipeline_start_time = time.time()
+        outdict = model(image.unsqueeze(0), **model_args)
+        pipeline_time = time.time() - pipeline_start_time
 
     x = outdict["out"]
     x_rotator_theta = outdict.get("theta", None)
