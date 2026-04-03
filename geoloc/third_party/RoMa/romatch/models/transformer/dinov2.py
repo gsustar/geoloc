@@ -337,8 +337,8 @@ def vit_large(patch_size=16, **kwargs):
         depth=24,
         num_heads=16,
         mlp_ratio=4,
-        # block_fn=partial(Block, attn_class=MemEffAttention),
-        block_fn=partial(Block, attn_class=Attention),
+        block_fn=partial(Block, attn_class=MemEffAttention),
+        # block_fn=partial(Block, attn_class=Attention),
         **kwargs,
     )
     return model

@@ -156,6 +156,9 @@ def rerank(
     all_num_inliers = []
     all_homographies = []
     all_num_outliers = []
+    all_kptsA = []
+    all_kptsB = []
+    all_masks = []
     for batch in dataloader:
         ref_batch = batch["image"].to(device)
         qry_batch_base = qry_image.expand(ref_batch.shape[0], -1, -1, -1)
@@ -188,9 +191,16 @@ def rerank(
         all_num_inliers.append(best_num_inliers)
         all_homographies.append(best_homographies)
         all_num_outliers.append(best_num_outliers)
+        all_kptsA.append(kptsA)
+        all_kptsB.append(kptsB)
+        all_masks.append(masks)
+        
     all_num_inliers = torch.cat(all_num_inliers, dim=0).cpu()
     all_homographies = torch.cat(all_homographies, dim=0).cpu()
     all_num_outliers = torch.cat(all_num_outliers, dim=0).cpu()
+    all_kptsA = torch.cat(all_kptsA, dim=0).cpu()
+    all_kptsB = torch.cat(all_kptsB, dim=0).cpu()
+    all_masks = torch.cat(all_masks, dim=0).cpu()
 
     sorted_order = torch.argsort(all_num_inliers, descending=True).numpy()
     inds = inds[:, sorted_order]
@@ -198,6 +208,9 @@ def rerank(
     all_num_inliers = all_num_inliers[sorted_order]
     all_num_outliers = all_num_outliers[sorted_order]
     all_homographies = all_homographies[sorted_order]
+    all_kptsA = all_kptsA[sorted_order]
+    all_kptsB = all_kptsB[sorted_order]
+    all_masks = all_masks[sorted_order]
 
     return dict(
         inds=inds,
@@ -205,4 +218,7 @@ def rerank(
         all_num_inliers=all_num_inliers.tolist(),
         all_homographies=all_homographies.tolist(),
         all_num_outliers=all_num_outliers.tolist(),
+        qry_kpts=all_kptsA.tolist(),
+        ref_kpts=all_kptsB.tolist(),
+        inliers=all_masks.tolist(),
     )

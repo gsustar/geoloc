@@ -67,15 +67,15 @@ def roma_outdoor(
         sample_mode=sample_mode,
     )
     if do_compile:
-        model.encoder = torch.compile(
-            model.encoder, 
-            mode="reduce-overhead",
-        )
-        model.decoder = torch.compile(
-            model.decoder,
-            # mode="reduce-overhead",
-        )
-        # model.compile()
+        # model.encoder = torch.compile(
+        #     model.encoder, 
+        #     mode="reduce-overhead",
+        # )
+        # model.decoder = torch.compile(
+        #     model.decoder,
+        #     # mode="reduce-overhead",
+        # )
+        model.compile()
     return model
 
 

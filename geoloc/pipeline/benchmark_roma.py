@@ -24,10 +24,10 @@ DEFAULT_GURS_ROOT     = "/storage/private/MORS/gurs"
 DEFAULT_AFX_DIR       = "/storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight2-part1"
 DEFAULT_AFX_META      = "/storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight2-part1_3fps_1080p_telemetry.csv"
 DEFAULT_RESULTS_PATH  = "/storage/datasets/AerialLoc/Drone2Sat/vdbs/contrastivemodel/GURS/secondtry/benchmark4/results_metastats.json"
-DEFAULT_QUERY_IX      = 3150
+DEFAULT_QUERY_IX      = 700
 DEFAULT_TOP_K         = 100
 DEFAULT_BATCH_SIZE    = 5
-DEFAULT_IMAGE_SIZE    = 350
+DEFAULT_IMAGE_SIZE    = 420
 DEFAULT_WARMUP_ITERS  = 3
 
 
@@ -93,7 +93,7 @@ def build_datasets(args):
 def build_reranker(args, device):
     from geoloc.models.reranking import RomaMatchAnythingMatcher, OpenCVRANSAC
 
-    ransac = OpenCVRANSAC(maxIters=5000, reproj_threshold=3.0)
+    ransac = OpenCVRANSAC(maxIters=2000, reproj_threshold=1.0)
     reranker = RomaMatchAnythingMatcher(
         coarse_res=args.image_size,
         upsample_res=864,
