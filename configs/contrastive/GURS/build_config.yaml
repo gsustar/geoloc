@@ -1,0 +1,50 @@
+ROTREF_EXP: False
+SAVE_REF_SALAD_MATRIX: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/contrastivemodel/GURS/singletilesize_savinjska_podravska_withaformx
+
+model:
+  class_path: geoloc.models.contrastive.ContrastiveModel
+  load_checkpoint: /home/grega/geoloc/logs/checkpoints/contrastivemodel/BigBoy/contrastivemodel_bb:c-radio_v4-h_agg:salad_lr:1e-04_sch:warmupcosineannealinglr_loss:sigliploss_ds:BigBoyTrainDataset_ep:50_20260320_123729/last.ckpt
+  # load_checkpoint: /home/grega/geoloc/logs/checkpoints/contrastivemodel/BigBoy/contrastivemodel_bb:c-radio_v4-h_agg:salad_lr:1e-04_sch:warmupcosineannealinglr_loss:sigliploss_ds:BigBoyTrainDataset_ep:50_20260324_150141/last.ckpt
+
+# dataset:
+#   class_path: geoloc.data.datasets.GURS.MultiTileSizeGURSReferenceDataset
+#   init_args:
+#     root: /storage/private/MORS/gurs/
+#     tile_sizes: [2000, 1500, 1000]
+#     strides: [1000, 1000, 1000]
+#     # border: Savinjska+Podravska
+#     border: Pomurska
+#     exclude_slo_border_tifs: True
+#     transforms:
+#       class_path: torchvision.transforms.Compose
+#       init_args:
+#         transforms:
+#           - class_path: torchvision.transforms.Resize
+#             init_args:
+#               size: [1024, 1024]
+dataset:
+  class_path: geoloc.data.datasets.GURS.GURSReferenceDataset
+  init_args:
+    root: /storage/private/MORS/gurs/
+    stride: 1000
+    tile_size: 1500
+    border: Savinjska+Podravska
+    exclude_slo_border_tifs: True
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: [1024, 1024]
+
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    # vdim: 8448
+    vdim:  16640
+    distfn: cosine
+    norm_vec: True

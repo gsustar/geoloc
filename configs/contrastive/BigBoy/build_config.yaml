@@ -1,0 +1,39 @@
+ROTREF_EXP: False
+SAVE_REF_SALAD_MATRIX: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/siglipmodel/VPAir/contrastive_dinov3_no_distractors
+# loaddir: &loaddir /storage/datasets/AerialLoc/Drone2Sat/vdbs/siglipmodel/VPAir/first
+
+model:
+  class_path: geoloc.models.contrastive.STContrastiveModel
+  # load_checkpoint: /home/grega/geoloc/logs/checkpoints/contrastivemodel/VPAir/contrastivemodel_bb:facebook-dinov3-vith16plus-pretrain-lvd1689m_agg:salad_lr:1e-05_sch:warmupcosineannealinglr_loss:sigliploss_ds:VPAirTrainDataset_ep:200_prec:16-mixed_20260217_114223/last.ckpt
+  load_checkpoint: /home/grega/geoloc/logs/checkpoints/contrastivemodel/VPAir/contrastivemodel_bb:facebook-dinov3-vith16plus-pretrain-lvd1689m_agg:salad_lr:1e-05_sch:warmupcosineannealinglr_loss:sigliploss_ds:VPAirTrainDataset_ep:100_20260218_152914/last.ckpt
+
+dataset:
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    include_distractors: False
+    percent_distractors: 1.0
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: [448, 448]
+          # - class_path: geoloc.data.transforms.CircleMaskCrop
+    # transforms:
+    #   class_path: torchvision.transforms.Compose
+    #   init_args:
+    #     transforms:
+    #       - class_path: torchvision.transforms.Resize
+    #         init_args:
+    #           size: [504, 504]
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim:  16640
+    distfn: cosine
+    norm_vec: True

@@ -27,6 +27,7 @@ class VisLocReferenceImages(torch.utils.data.Dataset):
         self.transforms = transforms
         self.root = root
         self.crs = "EPSG:4326"
+        self.pxl_res = 0.3
         self.flight_idx = f"{int(flight_idx):02d}"
         self.tif_path = os.path.join(
             self.root, self.flight_idx, f"satellite{self.flight_idx}.tif"
@@ -50,12 +51,17 @@ class VisLocReferenceImages(torch.utils.data.Dataset):
 
         # Precompute all valid tile windows
         self.tiles = []
+        geometries = []
         for x in range(0, self.tif_width, self.stride):
             for y in range(0, self.tif_height, self.stride):
                 w = min(self.tile_size, self.tif_width - x)
                 h = min(self.tile_size, self.tif_height - y)
                 self.tiles.append((x, y, w, h))
-
+                geometries.append(box(x, y, x + w, y + h))
+        self.all_windows = gpd.GeoDataFrame(
+             geometry=geometries,
+             crs=self.crs
+        )
         self.num_tiles_width = math.ceil(self.tif_width / self.stride)
         self.num_tiles_height = math.ceil(self.tif_height / self.stride)
 
@@ -97,6 +103,22 @@ class VisLocReferenceImages(torch.utils.data.Dataset):
             lat=center_y,
             geometry=geometry,
         )
+
+    def get_coords_only(self, index):
+        x, y, w, h = self.tiles[index]
+        center_col = x + w // 2
+        center_row = y + h // 2
+        center_x, center_y = xy(self.transform, center_row, center_col)
+        return center_x, center_y
+
+    def _get_gt_windows(self, footprint, overlap_threshold=0.5):
+        candidates = self.all_windows[self.all_windows.intersects(footprint)]
+        intersection_area = candidates.intersection(footprint).area
+        overlap_ratio = np.maximum(
+            intersection_area / candidates.area,
+            intersection_area / footprint.area
+        )
+        return candidates[overlap_ratio >= overlap_threshold]
 
     def __del__(self):
         if hasattr(self, "src"):

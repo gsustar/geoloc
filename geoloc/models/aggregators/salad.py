@@ -67,6 +67,7 @@ class SALAD(nn.Module):
     def __init__(
         self,
         num_channels=1536,
+        num_token_channels=None,
         num_clusters=64,
         cluster_dim=128,
         token_dim=256,
@@ -75,6 +76,7 @@ class SALAD(nn.Module):
         super().__init__()
 
         self.num_channels = num_channels
+        self.num_token_channels = num_token_channels if num_token_channels is not None else num_channels
         self.num_clusters = num_clusters
         self.cluster_dim = cluster_dim
         self.token_dim = token_dim
@@ -86,7 +88,7 @@ class SALAD(nn.Module):
 
         # MLP for global scene token g
         self.token_features = nn.Sequential(
-            nn.Linear(self.num_channels, 512), nn.ReLU(), nn.Linear(512, self.token_dim)
+            nn.Linear(self.num_token_channels, 512), nn.ReLU(), nn.Linear(512, self.token_dim)
         )
         # MLP for local features f_i
         self.cluster_features = nn.Sequential(

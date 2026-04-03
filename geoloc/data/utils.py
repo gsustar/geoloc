@@ -162,3 +162,36 @@ def collate_with_geometry(batch):
         return collated
     else:
         return default_collate(batch)
+
+
+def get_valid_center(array: np.ndarray, mask: np.ndarray):
+    """
+    Get the valid element closest to the image center.
+    
+    Args:
+        array: Array of shape [H, W, ...] or [H, W]
+        mask: Boolean mask of shape [H, W], True = valid
+        
+    Returns:
+        value: The array element at closest valid position
+        coords: (y, x) tuple of the position
+        distance: Euclidean distance from true center
+    """
+    if not torch.any(mask).item():
+        raise ValueError("Mask has no valid pixels")
+    
+    h, w = mask.shape
+    center_y, center_x = h / 2 - 0.5, w / 2 - 0.5  # Exact center (can use h//2, w//2 for pixel center)
+    
+    # Get coordinates of all valid pixels [N, 2]
+    valid_coords = torch.argwhere(mask)  # Returns [[y1, x1], [y2, x2], ...]
+    
+    # Compute squared distance to center for all valid pixels
+    distances_sq = torch.sum((valid_coords - torch.tensor([center_y, center_x])) ** 2, axis=1)
+    
+    # Find closest
+    closest_idx = torch.argmin(distances_sq)
+    closest_y, closest_x = valid_coords[closest_idx]
+    distance = torch.sqrt(distances_sq[closest_idx]).item()
+    
+    return array[closest_y, closest_x]#, (closest_y, closest_x), distance

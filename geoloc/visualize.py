@@ -23,6 +23,10 @@ def visualize_top_k_retrieved(
     query_theta=0,
     rotator_theta=None,
     rotator_ref_thetas=None,
+    all_num_inliers=None,
+    all_num_outliers=None,
+    passed_distribution_check=None,
+    idcscore=None,
 ):
     fig, axes = plt.subplots(1, 6, figsize=(15, 4))
 
@@ -35,7 +39,8 @@ def visualize_top_k_retrieved(
     query_image = query_image.astype(np.uint8)
 
     axes[0].imshow(query_image.transpose(1, 2, 0))
-    axes[0].set_title(f"Qry | rot: {query_theta:.2f}° | rrot: {rotator_theta:.2f}°")
+    # axes[0].set_title(f"Qry | rot: {query_theta:.2f}° | rrot: {rotator_theta:.2f}°") # Uncomment this if every needed
+    axes[0].set_title(f"Qry idx: {query_ix}", fontsize=10)
     axes[0].axis("off")
 
     for j in range(1, 6):
@@ -57,14 +62,33 @@ def visualize_top_k_retrieved(
         ref_im = ref_im.cpu().numpy() * 255
         ref_im = ref_im.astype(np.uint8)
 
-        ref_title = f"Ref{j-1} | rot: {rot} | rrot: {ref_rotator_theta:.2f}°"
+        title_parts = []
         if gdists is not None:
-            ref_title = f"Ref{j-1} ({gdists[j-1]:.2f} m) | rot: {rot:.2f} | rrot: {ref_rotator_theta:.2f}°"
+            title_parts.append(f"{gdists[j-1]:.2f} m")
+
+        ratio_text = None
+        if all_num_inliers is not None and all_num_outliers is not None:
+            inliers = int(all_num_inliers[j - 1])
+            outliers = int(all_num_outliers[j - 1])
+            ratio = inliers / max(outliers, 1)
+            ratio_text = f"I/O: {inliers}/{outliers} ({ratio:.2f})"
+
+        ref_title = f"Ref idx: {ref_im_ix} | " + " | ".join(title_parts)
 
         axes[j].imshow(ref_im.transpose(1, 2, 0))
-        axes[j].set_title(ref_title)
+        axes[j].set_title(ref_title, fontsize=10)
         axes[j].set_xticks([])
         axes[j].set_yticks([])
+        if ratio_text is not None:
+            axes[j].text(
+                0.5,
+                -0.08,
+                ratio_text,
+                transform=axes[j].transAxes,
+                ha="center",
+                va="top",
+                fontsize=10,
+            )
 
         # Add colored border for TP/FP if gt_pos is provided
         if gt_pos is not None:
@@ -72,6 +96,11 @@ def visualize_top_k_retrieved(
             for spine in axes[j].spines.values():
                 spine.set_edgecolor(color)
                 spine.set_linewidth(3)
+    
+    if passed_distribution_check is not None:
+        color = "green" if passed_distribution_check else "red"
+        text = f"PASSED ({idcscore:.2f})" if passed_distribution_check else f"FAILED ({idcscore:.2f})"
+        fig.text(0.05, 0.90, text, fontsize=10, color=color, ha="left", va="bottom")
 
     title = f"Query #{query_ix} theta: {query_theta}"
     if min_dists_at_k is not None:
@@ -81,7 +110,7 @@ def visualize_top_k_retrieved(
             f"min dist@5: {min_dists_at_k[1]:.2f} m"
         )
 
-    fig.suptitle(title, fontsize=13)
+    fig.suptitle(title, fontsize=15)
     plt.tight_layout(rect=[0, 0, 1, 0.92])
     if filename is None:
         filename = f"query_{query_ix:03d}_rot_{query_theta:03d}.png"
@@ -174,7 +203,7 @@ def visualize_similarity_heatmap_gurs(
         if rotref_exp:
             ind = ind % len(ref_image_dataset)
         # Calculate the retrieved image position in the heatmap
-        pr_east, pr_north = ref_image_dataset.get_eastnorth_only(ind)
+        pr_east, pr_north = ref_image_dataset.get_coords_only(ind)
         pr_row = int((maxy - pr_north) / (maxy - miny) * heatmap_h)
         pr_col = int((pr_east - minx) / (maxx - minx) * heatmap_w)
         heatmap[pr_row, pr_col] = dist

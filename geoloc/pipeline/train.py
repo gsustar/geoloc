@@ -9,39 +9,29 @@ from geoloc.trainer import GeolocTrainer
 
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
-from geoloc.config_parser import load_config, save_config, namespace_to_dict, class_from_config
+from geoloc.config_parser import load_config, save_config, namespace_to_dict, class_from_config, func_from_string
 from geoloc.utils import load_model, create_run_name
+
+from geoloc.data.datasets.BigBoy import BigBoyTrainDataset, bigboy_collate_fn
 
 def create_argparse():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True, help="Path to the configuration file")
     return parser
 
-# def create_run_name(config):
-#     model_cls = config.model.class_path.split(".")[-1].lower()
-#     backbone_name = getattr(
-#         config.model.init_args.backbone.init_args, "model_name", 
-#         getattr(config.model.init_args.backbone.init_args, "pretrained_model_name_or_path", None))
-#     dataset_name = f"{config.dataset.class_path.split('.')[-2]}"
-#     aggregator_name = config.model.init_args.aggregator.class_path.split(".")[-1].lower()
-#     run_name = f"{model_cls}_{dataset_name}_{backbone_name}_{aggregator_name}"
-#     if getattr(config.dataset.init_args, "north_align", False):
-#         run_name += f"_N-align"
-#     if hasattr(config.model, "optimizer"):
-#         run_name += f"_lr={config.model.optimizer.init_args.lr:.0e}"
-#     if hasattr(config.trainer, "max_epochs"):
-#          run_name += f"_ep={config.trainer.max_epochs}"
-#     run_name += f"_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-#     return run_name
 
 def train(config):
 
     # torch.set_float32_matmul_precision('medium')
 
+    train_collate_func = collate_with_geometry
+    if hasattr(config.dataloader, "collate_fn") and config.dataloader.collate_fn is not None:
+        train_collate_func = func_from_string(config.dataloader.pop("collate_fn"))
+
     train_dataset = class_from_config(config.dataset)
     train_dataloader = DataLoader(
         train_dataset,
-        collate_fn=collate_with_geometry,
+        collate_fn=train_collate_func,
         **vars(config.dataloader)
     )
     build_dataloader = None
@@ -65,7 +55,7 @@ def train(config):
             collate_fn=collate_with_geometry,
         )
 
-    model = load_model(config)
+    model = load_model(config, do_compile=True)
     model_cls_name = model.__class__.__name__.lower()
 
     dataset_name = config.dataset.class_path.split(".")[-2]
@@ -95,10 +85,10 @@ def train(config):
         logger=logger,
         train_config=config,
     )
+    save_config(config, savedir, prefix="train")
     trainer.fit(
         model=model, train_dataloaders=train_dataloader, build_dataloader=build_dataloader, val_dataloaders=benchmark_dataloader
     )
-    save_config(config, savedir, prefix="train")
 
 
 def main():

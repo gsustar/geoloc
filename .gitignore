@@ -5,3 +5,9 @@ visualizations/
 wandb/
 lightning_logs/
 experiments/
+
+exported_models/
+
+*.prof
+*.lock
+.venv/

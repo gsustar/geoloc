@@ -4,14 +4,14 @@ savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/segvlad/VPAir/first
 
 model:
   class_path: geoloc.models.relatedwork.segvlad.SegVladModel
-  # load_checkpoint: /storage/datasets/AerialLoc/Drone2Sat/ckpts/segvlad/VPAir/best.ckpt # TODO
+  load_checkpoint: /home/grega/geoloc/logs/checkpoints/segvlad/VPAir/segvlad_bb:dinov2_vitg14_agg:vlad_ds:VPAirReferenceImages_ep:1_20260127_131600/last.ckpt
 
 dataset:
-  class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
-  # class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
+  # class_path: geoloc.data.datasets.VPAir.VPAirReferenceImages
+  class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
   init_args:
     root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
-    include_distractors: False
+    include_distractors: True
 
 vdb:
   class_path: geoloc.data.vdb.VectorDatabase

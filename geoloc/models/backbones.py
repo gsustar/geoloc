@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from copy import deepcopy
-from .utils import freeze, unfreeze_layers, dino_processor, remove_registers_and_cls_token
+from .utils import freeze, unfreeze_layers, dino_processor, radio_processor, remove_registers_and_cls_token
 
 
 class MultiScaleOutputMixin:
@@ -416,7 +416,7 @@ class RADIOBackbone(nn.Module, MultiScaleOutputMixin):
         ):
         super().__init__()
         self.model_name = model_name
-        self.backbone = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_name, progress=False, skip_validation=True)
+        self.backbone = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_name, progress=False, skip_validation=True, force_reload=True)
         self.backbone = freeze(self.backbone)
         self.return_cls_token = return_cls_token
         # self.backbone = unfreeze_layers(self.backbone, num_trainable_blocks)
@@ -428,6 +428,7 @@ class RADIOBackbone(nn.Module, MultiScaleOutputMixin):
         )
 
     def forward(self, x: torch.Tensor):
+        x = radio_processor(x)
         (summary, final), features = self.backbone.forward_intermediates(x, indices=self.out_indices)
         _, _, lh, lw = final.shape
         if self.output_hidden_states:

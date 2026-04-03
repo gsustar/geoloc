@@ -1,0 +1,87 @@
+model:
+  class_path: geoloc.models.contrastive.ContrastiveModel
+  init_args:
+    backbone:
+      # class_path: geoloc.models.backbones.HFaceDINOBackbone
+      # init_args:
+      #   pretrained_model_name_or_path: facebook/dinov3-vith16plus-pretrain-lvd1689m
+      #   return_cls_token: True
+      #   out_indices: auto
+      #   out_channels: 1280
+      class_path: geoloc.models.backbones.RADIOBackbone
+      init_args:
+        model_name: c-radio_v4-h
+        return_cls_token: True
+        out_indices: auto
+        out_channels: 1280
+    aggregator:
+      class_path: geoloc.models.aggregators.SALAD
+      init_args:
+        num_channels: 1280
+        num_token_channels: 2560
+        num_clusters: 64
+        cluster_dim: 128
+        token_dim: 256
+    optimizer:
+      class_path: torch.optim.AdamW
+      init_args:
+        lr: 1.0e-5
+        weight_decay: 1.0e-5
+    scheduler:
+      class_path: geoloc.schedulers.WarmupCosineAnnealingLR
+      init_args:
+        warmup_epochs: 10
+        max_epochs: &max_epochs 100
+        warmup_start_factor: 0.01
+        eta_min: 1.0e-6
+    loss: 
+      class_path: geoloc.losses.SigLIPLoss
+    # st_loss:
+    #   class_path: geoloc.losses.MultiPlaceMSELoss
+    #   init_args:
+    #     lmbd: 0.1
+    faiss_gpu: False
+
+dataset:
+  class_path: geoloc.data.datasets.VPAir.VPAirTrainDataset
+  init_args:
+    root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
+    # north_align: True
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: [384, 384]
+          # - class_path: geoloc.data.transforms.CircleMaskCrop
+          - class_path: torchvision.transforms.RandomRotation
+            init_args:
+              degrees: 180
+
+dataloader:
+  batch_size: 64
+  num_workers: 2
+  shuffle: True
+  drop_last: True
+  pin_memory: False
+
+trainer:
+  accelerator: 'gpu'
+  devices: 1
+  default_root_dir: './logs/'
+  num_nodes: 1
+  num_sanity_val_steps: 0
+  # precision: '16-mixed'
+  max_epochs: *max_epochs
+  check_val_every_n_epoch: 10
+  reload_dataloaders_every_n_epochs: 1
+  log_every_n_steps: 20
+  gradient_clip_val: 1.0
+
+logger: # WandbLogger config
+  offline: False
+  save_dir: /home/grega/geoloc/logs/
+
+build_config: !include contrastive_build.yaml
+benchmark_config: !include contrastive_benchmark.yaml

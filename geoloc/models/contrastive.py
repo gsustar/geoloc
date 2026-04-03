@@ -10,17 +10,9 @@ class ContrastiveModel(VPRModel):
 
     def _unpack_training_batch(self, batch):
         imgs = batch["images"]
-        # if imgs.ndim == 4:
-        #     imgs = imgs.unsqueeze(1)  # add num_same_place dim
-        # BS, N, ch, h, w = imgs.shape
         return imgs, None
 
     def train_forward(self, x):
-        # Expecting x of shape (B, N, C, H, W)
-        # do_squeeze = False
-        # if x.ndim == 4:
-        #     do_squeeze = True
-        #     x = x.unsqueeze(1)  # add num_same_place dim
         BS, N, ch, h, w = x.shape
         embeddings = []
         for i in range(BS):
@@ -28,45 +20,12 @@ class ContrastiveModel(VPRModel):
             embed = self.aggregator(embed)
             embeddings.append(embed)
         embeddings = torch.stack(embeddings, dim=0)
-        # if do_squeeze:
-        #     embeddings = embeddings.squeeze(1)
-        # embeddings = F.normalize(embeddings, dim=-1) # TODO: is this needed here? ->  NO remove when run finishes -> you had good results with this
         return dict(out=embeddings)
-
-    # def forward(self, x):
-    #     do_squeeze = False
-    #     if x.ndim == 4:
-    #         do_squeeze = True
-    #         x = x.unsqueeze(1)  # add num_same_place dim
-    #     B, n, C, H, W = x.shape
-
-    #     embeddings = []
-    #     for i in range(B):
-    #         embed = self.backbone(x[i])
-    #         embed = self.aggregator(embed)
-    #         # embed = self.image_encoder(x[i])
-    #         embeddings.append(embed)
-    #     embeddings = torch.stack(embeddings, dim=0)
-    #     if do_squeeze:
-    #         embeddings = embeddings.squeeze(1)
-    #     embeddings = F.normalize(embeddings, dim=-1) # TODO: is this needed here?
-    #     return dict(out=embeddings)
 
     def loss_function(self, descriptors, labels=None):
         loss = self.loss_fn(descriptors)
         return loss
 
-    # def training_step(self, batch, batch_idx):
-    #     imgs = batch["images"]
-    #     imgs, _, _ = self._unpack_training_batch(batch)
-    #     descriptors = self(imgs)["out"]
-
-    #     if torch.isnan(descriptors).any():
-    #         raise ValueError("NaNs in descriptors")
-
-    #     loss = self.loss_function(descriptors)
-    #     self.log("loss", loss.item(), logger=True, prog_bar=True)
-    #     return {"loss": loss}
 
 class STContrastiveModel(ContrastiveModel):
     def __init__(self, *args, st_loss, training_step_mode="normal", **kwargs):

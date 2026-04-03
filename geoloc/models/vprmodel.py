@@ -219,10 +219,11 @@ class VPRModel(L.LightningModule):
         )
         self.num_qry_images += 1
         recall_at_k = benchmark_results["recall_at_k"]
-        intersection_recall_at_k = benchmark_results["intersection_recall_at_k"]
-        self.val_recalls_at_k += torch.from_numpy(
-            recall_at_k if intersection_recall_at_k is None else intersection_recall_at_k
-        )
+        self.val_recalls_at_k += torch.from_numpy(recall_at_k)
+        # intersection_recall_at_k = benchmark_results["intersection_recall_at_k"]
+        # self.val_recalls_at_k += torch.from_numpy(
+        #     recall_at_k if intersection_recall_at_k is None else intersection_recall_at_k
+        # )
 
     def on_validation_epoch_end(self):
         self.val_recalls_at_k = self.val_recalls_at_k / self.num_qry_images

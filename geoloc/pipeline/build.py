@@ -37,6 +37,7 @@ def build_vdb(config, batchsize: int = 1):
         collate_fn=collate_with_geometry,
     )
     model = load_model(config).eval().to(device)
+    model.compile()
     
     print("Building database...")
     vdb = class_from_config(config.vdb)

@@ -149,6 +149,13 @@ def class_from_config(config, instantiate=True, key=None, from_load_checkpoint=F
     return ret_cls
 
 
+def func_from_string(func_string):
+    module_name, func_name = func_string.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    func = getattr(module, func_name)
+    return func
+
+
 def dict_to_namespace(d):
     if isinstance(d, dict):
         return SimpleNamespaceWithPop(**{k: dict_to_namespace(v) for k, v in d.items()})

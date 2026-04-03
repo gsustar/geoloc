@@ -9,11 +9,17 @@ from loguru import logger
 import random
 import zipfile
 import matplotlib.pyplot as plt
-from torchvision.transforms import functional
+# from torchvision.transforms import functional
+import torchvision.transforms.functional as TF
+import torchvision.transforms as T
 from torch.nn import functional as F
 from collections import defaultdict
+from shapely.geometry import Polygon, MultiPoint
+
+from ...utils import get_valid_center
 
 from . import utils
+from .correspondences.Correspondences2D2D import Correspondences2D2D
 
 class OrthoLoC(Dataset):
     def __init__(self, dataset_dir: str | None = None, sample_paths: list[str] | None = None, seed=47,
@@ -303,13 +309,13 @@ class OrthoLoC(Dataset):
 
         # compute GT correspondences with full resolution
         pose_world2dop, intrinsics_dop = utils.pose.compute_raster_intrinsics_extrinsics(scale=scale, offset=offset)
-        # query_to_dop_correspondences_2d2d = Correspondences2D2D.from_grids3d(grid3d_0=point_map, grid3d_1=dsm,
-        #                                                                      pose_w2c_1=pose_world2dop,
-        #                                                                      intrinsics_1=intrinsics_dop,
-        #                                                                      decay=self.gt_matching_confidences_decay,
-        #                                                                      normalized=True)
-        # matches = query_to_dop_correspondences_2d2d.pts1.reshape((h_query, w_query, 2))
-        # matching_confidences = query_to_dop_correspondences_2d2d.confidences.reshape((h_query, w_query, 1))
+        query_to_dop_correspondences_2d2d = Correspondences2D2D.from_grids3d(grid3d_0=point_map, grid3d_1=dsm,
+                                                                             pose_w2c_1=pose_world2dop,
+                                                                             intrinsics_1=intrinsics_dop,
+                                                                             decay=self.gt_matching_confidences_decay,
+                                                                             normalized=True)
+        matches = query_to_dop_correspondences_2d2d.pts1.reshape((h_query, w_query, 2))
+        matching_confidences = query_to_dop_correspondences_2d2d.confidences.reshape((h_query, w_query, 1))
 
         # resize
         size_query, size_dop_dsm = None, None
@@ -329,9 +335,9 @@ class OrthoLoC(Dataset):
             intrinsics_query = self.scale_intrinsic(torch.from_numpy(intrinsics_query), hi=h_query, wi=w_query,
                                                     size=size_query).numpy()
             point_map = self.resize_map(point_map, size=size_query, align_corners=False, mode='bilinear')
-            # matches = self.resize_map(matches, size=size_query, align_corners=False, mode='bilinear')
-            # matching_confidences = self.resize_map(matching_confidences, size=size_query, align_corners=False,
-            #                                        mode='bilinear')
+            matches = self.resize_map(matches, size=size_query, align_corners=False, mode='bilinear')
+            matching_confidences = self.resize_map(matching_confidences, size=size_query, align_corners=False,
+                                                   mode='bilinear')
 
         if size_dop_dsm is not None:
             image_dop = self.resize_image(image_dop, mode='linear', size=size_dop_dsm)
@@ -349,6 +355,9 @@ class OrthoLoC(Dataset):
         pose_world2dop, intrinsics_dop = utils.pose.compute_raster_intrinsics_extrinsics(scale=scale, offset=offset)
         pose_world2query = np.linalg.inv(np.concatenate([pose_query2world, np.array([[0, 0, 0, 1]])],
                                                         axis=0))[:3].astype(pose_query2world.dtype)
+        
+        # query_footprint = self.compute_footprint(point_map, mask_point_map)
+        # dop_footprint = self.compute_footprint(dsm, mask_dsm)
 
         # resize data
         output = {
@@ -370,15 +379,66 @@ class OrthoLoC(Dataset):
             'offset': offset,  # offset
             'intrinsics_dop': intrinsics_dop,  # image_dop intrinsics
             'pose_world2dop': pose_world2dop,  # world to image_dop
-            # 'matches': matches,
-            # 'matching_confidences': matching_confidences,
+            'matches': matches,
+            'matching_confidences': matching_confidences,
             'keypoints': data['keypoints'],
+            # 'query_footprint': query_footprint,
+            # 'dop_footprint': dop_footprint,
             'h_query': h_query,  # original query height
             'w_query': w_query,  # original query width
             'h_dop': h_dop,  # original image_dop height
             'w_dop': w_dop,  # original image_dop width
         }
         return output
+
+    # def compute_footprint(self, world_grid: np.ndarray, validity_mask: np.ndarray):
+    #     H, W, _ = world_grid.shape
+
+    #     tl = world_grid[0, 0, :2]
+    #     tr = world_grid[0, W - 1, :2]
+    #     br = world_grid[H - 1, W - 1, :2]
+    #     bl = world_grid[H - 1, 0, :2]
+
+    #     footprint = MultiPoint([
+    #         [tl[0], tl[1]], [tr[0], tr[1]],
+    #         [br[0], br[1]], [bl[0], bl[1]]
+    #     ]).convex_hull
+    #     return footprint
+
+    # def compute_footprint(self, dsm_or_pointmap: np.ndarray, validity_mask: np.ndarray):
+
+    #     valid_dsm_or_pointmap = dsm_or_pointmap[validity_mask]
+    #     xy_dsm_or_pointmap = valid_dsm_or_pointmap[:, :2]
+
+    #     # if len(xy_dsm_or_pointmap) >= 3:
+    #     #     hull = ConvexHull(xy_dsm_or_pointmap)
+    #     #     footprint = Polygon(xy_dsm_or_pointmap[hull.vertices])
+    #     # else:
+    #     mins, maxs = xy_dsm_or_pointmap.min(axis=0), xy_dsm_or_pointmap.max(axis=0)
+    #     footprint = MultiPoint([
+    #         [mins[0], mins[1]], [maxs[0], mins[1]],
+    #         [maxs[0], maxs[1]], [mins[0], maxs[1]]
+    #     ]).convex_hull
+    #     return footprint
+
+    # def compute_footprint(self, world_grid, validity_mask):
+    #     H, W, _ = world_grid.shape
+
+    #     border_mask = np.zeros((H, W), dtype=bool)
+    #     border_mask[0, :] = True
+    #     border_mask[-1, :] = True
+    #     border_mask[:, 0] = True
+    #     border_mask[:, -1] = True
+
+    #     mask = border_mask & validity_mask
+    #     pts = world_grid[mask][:, :2]
+
+    #     if pts.shape[0] < 3:
+    #         return None
+
+    #     hull = MultiPoint(pts).convex_hull
+    #     return hull if hull.geom_type == "Polygon" else None
+
 
     @staticmethod
     def resize_tensor(array: torch.Tensor, size: tuple[int, int], align_corners: bool | None = False,
@@ -436,7 +496,7 @@ class OrthoLoC(Dataset):
         data_dict = {}
         for k, v in data.items():
             if k.startswith('image_'):
-                data_dict[k] = functional.to_tensor(v)
+                data_dict[k] = TF.to_tensor(v)
             elif isinstance(v, str) or isinstance(v, np.ndarray) and np.issubdtype(v.dtype, np.str_):
                 data_dict[k] = str(v)
             elif isinstance(v, np.ndarray):
@@ -533,7 +593,7 @@ class OrthoLoC(Dataset):
 
 
 class OrthoLocTrainImages(torch.utils.data.Dataset):
-    def __init__(self, dataset_dir: str, mode: int = 2):
+    def __init__(self, dataset_dir: str, mode: int = 2, transforms=None, image_size: tuple = (512, 512), north_align: bool = False):
         super().__init__()
         self.ortholoc_dataset =  OrthoLoC(
             dataset_dir=dataset_dir,
@@ -542,43 +602,208 @@ class OrthoLocTrainImages(torch.utils.data.Dataset):
             start=0.,
             end=1.,
             mode=mode,
-            new_size=None,
+            new_size=image_size,
             limit_size=None,
             shuffle=False,
-            scale_query_image=1.0,
-            scale_dop_dsm=1.0,
+            scale_query_image=None,
+            scale_dop_dsm=None,
             gt_matching_confidences_decay=1.0,
             covisibility_ratio=1.0,
-            return_tensor=False,
+            return_tensor=True,
             predownload=False,
         )
+        self.transforms = transforms
+        self.crs = "ortholoc"
+        self.north_align = north_align
 
     def __len__(self):
         return len(self.ortholoc_dataset)
 
-    def __getitem__(self, idx):
-        sample = self.ortholoc_dataset[idx]
-        qry = sample['image_query']
+    def __getitem__(self, index):
+        sample = self.ortholoc_dataset[index]
+
+        pose_q2w = sample['pose_query2world']
+        camera_pos = pose_q2w[:3, 3]
+        rotation_matrix = pose_q2w[:3, :3]
+        filename = sample['sample_id_original']
+
+        # valid_center = get_valid_center(sample["dsm"], sample["mask_dsm"])
+        # lon = float(valid_center[0])
+        # lat = float(valid_center[1])
+        # alt = float(valid_center[2])
+        lon = float(camera_pos[0])
+        lat = float(camera_pos[1])
+        alt = float(camera_pos[2])
+        
+        pitch = float(np.arcsin(-rotation_matrix[2, 0]))
+        roll = float(np.arctan2(rotation_matrix[2, 1], rotation_matrix[2, 2]))
+        yaw = float(np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0]))
+
+        query = sample['image_query']
+        if self.north_align:
+            query = TF.rotate(
+                query,
+                angle=(-yaw * 180.0 / torch.pi).item(),
+                interpolation=T.InterpolationMode.BILINEAR,
+            )
+        if self.transforms is not None:
+            query = self.transforms(query)
         ref = sample['image_dop']
+        if self.transforms is not None:
+            ref = self.transforms(ref)
+
+
+
+        imgs = torch.stack([query, ref], dim=0)
+        return dict(
+            images=imgs,  # [N, C, H, W], where N is the number of same-place images (2 here)
+            filename=filename,
+            index=index,
+            lon=lon,
+            lat=lat,
+            alt=alt,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw, # Make sure yaw is in radians!!!
+        )
 
 class OrthoLoCReferenceImages(torch.utils.data.Dataset):
-    def __init__(self):
-        pass
+    def __init__(self, dataset_dir: str, mode: int = 2, set_name: str = "val", transforms=None, image_size: tuple = (512, 512)):
+        super().__init__()
+        self.ortholoc_dataset =  OrthoLoC(
+            dataset_dir=dataset_dir,
+            sample_paths=None,
+            set_name=set_name,
+            start=0.,
+            end=1.,
+            mode=mode,
+            new_size=image_size,
+            limit_size=None,
+            shuffle=False,
+            scale_query_image=None,
+            scale_dop_dsm=None,
+            gt_matching_confidences_decay=1.0,
+            covisibility_ratio=1.0,
+            return_tensor=True,
+            predownload=False,
+        )
+        self.transforms = transforms
+        self.crs = "ortholoc"
 
     def __len__(self):
-        pass
+        return len(self.ortholoc_dataset)
 
-    def __getitem__(self, idx):
-        pass  
+    def __getitem__(self, index):
+        sample = self.ortholoc_dataset[index]
+
+        pose_q2w = sample['pose_query2world']
+        camera_pos = pose_q2w[:3, 3]
+        rotation_matrix = pose_q2w[:3, :3]
+        filename = sample['sample_id_original']
+        # geometry = sample['dop_footprint']
+
+        # valid_center = get_valid_center(sample["dsm"], sample["mask_dsm"])
+        # lon = float(valid_center[0])
+        # lat = float(valid_center[1])
+        # alt = float(valid_center[2])
+        
+        lon = float(camera_pos[0])
+        lat = float(camera_pos[1])
+        alt = float(camera_pos[2])
+        
+        pitch = float(np.arcsin(-rotation_matrix[2, 0]))
+        roll = float(np.arctan2(rotation_matrix[2, 1], rotation_matrix[2, 2]))
+        yaw = float(np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0]))
+
+        ref = sample['image_dop']
+        if self.transforms is not None:
+            ref = self.transforms(ref)
+
+        return dict(
+            image=ref,  # [N, C, H, W], where N is the number of same-place images (2 here)
+            index=index,
+            filename=filename,
+            lon=lon,
+            lat=lat,
+            alt=alt,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw, # Make sure yaw is in radians!!!
+            # geometry=geometry,
+            gt_pos = -1
+        )
 
 
 class OrthoLoCQueryImages(torch.utils.data.Dataset):
-    def __init__(self):
-        pass
+    def __init__(self, dataset_dir: str, mode: int = 2, set_name: str = "val", transforms=None, image_size: tuple = (512, 512), north_align: bool = False):
+        super().__init__()
+        self.ortholoc_dataset =  OrthoLoC(
+            dataset_dir=dataset_dir,
+            sample_paths=None,
+            set_name=set_name,
+            start=0.,
+            end=1.,
+            mode=mode,
+            new_size=image_size,
+            limit_size=None,
+            shuffle=False,
+            scale_query_image=None,
+            scale_dop_dsm=None,
+            gt_matching_confidences_decay=1.0,
+            covisibility_ratio=1.0,
+            return_tensor=True,
+            predownload=False,
+        )
+        self.transforms = transforms
+        self.crs = "ortholoc"
+        self.north_align = north_align
 
     def __len__(self):
-        pass
+        return len(self.ortholoc_dataset)
 
-    def __getitem__(self, idx):
-        pass
+    def __getitem__(self, index):
+        sample = self.ortholoc_dataset[index]
+
+        pose_q2w = sample['pose_query2world']
+        camera_pos = pose_q2w[:3, 3]
+        rotation_matrix = pose_q2w[:3, :3]
+        filename = sample['sample_id_original']
+        # geometry = sample['query_footprint']
+
+        # valid_center = get_valid_center(sample["point_map"], sample["mask_point_map"])
+        # lon = float(valid_center[0])
+        # lat = float(valid_center[1])
+        # alt = float(valid_center[2])
+        
+        lon = float(camera_pos[0])
+        lat = float(camera_pos[1])
+        alt = float(camera_pos[2])
+        
+        pitch = float(np.arcsin(-rotation_matrix[2, 0]))
+        roll = float(np.arctan2(rotation_matrix[2, 1], rotation_matrix[2, 2]))
+        yaw = float(np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0]))
+
+        query = sample['image_query']
+        if self.north_align:
+            query = TF.rotate(
+                query,
+                angle=(-yaw * 180.0 / torch.pi).item(),
+                interpolation=T.InterpolationMode.BILINEAR,
+            )
+        if self.transforms is not None:
+            query = self.transforms(query)
+
+        return dict(
+            image=query,  # [N, C, H, W], where N is the number of same-place images (2 here)
+            index=index,
+            filename=filename,
+            lon=lon,
+            lat=lat,
+            alt=alt,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw, # Make sure yaw is in radians!!!
+            # geometry=geometry
+            gt_pos = np.array([index])
+        )
     

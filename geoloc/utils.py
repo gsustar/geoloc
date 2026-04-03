@@ -106,12 +106,14 @@ def load_model_from_my_checkpoint(checkpoint_path: str):
     model.my_config = model_config
     return model
 
-def load_model(config=None, checkpoint_path: str = None):
+def load_model(config=None, checkpoint_path: str = None, do_compile=True):
     assert (config is not None) != (checkpoint_path is not None), \
         "Exactly one of config or checkpoint_path must be provided"
     if checkpoint_path is not None:
         return load_model_from_my_checkpoint(checkpoint_path)
     model = class_from_config(config.model)
+    if do_compile and hasattr(model, "compile"):
+        model.compile()
     model.my_config = config.model
     return model
 

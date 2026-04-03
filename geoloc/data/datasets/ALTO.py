@@ -94,3 +94,47 @@ class ALTOQueryImages(torch.utils.data.Dataset):
             gt_pos=gt_pos,
             distance_to_gt=distance_to_gt,
         )
+
+class ALTOTrainDataset(torch.utils.data.Dataset):
+
+    def __init__(self, root, round=1, offset="offset_0_None", transforms=None):
+        super().__init__()
+        self.transforms = transforms
+        self.root = root
+        self.crs = "EPSG:32617"
+        self.round = str(round)
+        assert self.round in ["1", "2"]
+        self.offset = offset
+
+        self.new_root = os.path.join(self.root, self.round, "Train")
+        self.references = get_sorted_imgpaths(
+            os.path.join(self.new_root, "reference_images", self.offset)
+        )
+        self.queries = get_sorted_imgpaths(os.path.join(self.new_root, "query_images"))
+        self.gt_matches = pd.read_csv(os.path.join(self.new_root, "gt_matches.csv"))
+    
+        # self.info = pd.read_csv(os.path.join(self.new_root, "reference.csv"))
+        # self.info = self.info[self.info["name"].str.contains(self.offset)].reset_index(
+        #     drop=True
+        # )
+        # self.info_q = pd.read_csv(os.path.join(self.new_root, "query.csv"))
+
+    def __len__(self):
+        return len(self.queries)
+    
+    def __getitem__(self, index):
+        qry_img = load_image(self.queries[index])
+        if self.transforms is not None:
+            qry_img = self.transforms(qry_img)
+        qry_img = qry_img / 255.0
+
+        gt_pos = self.gt_matches["ref_ind"].iloc[index]
+        ref_img = load_image(self.references[gt_pos])
+        if self.transforms is not None:
+            ref_img = self.transforms(ref_img)
+        ref_img = ref_img / 255.0
+
+        imgs = torch.stack([qry_img, ref_img], dim=0)
+        return dict(
+            images=imgs
+        )

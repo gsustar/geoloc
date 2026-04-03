@@ -47,7 +47,7 @@ dataset:
         transforms:
           - class_path: torchvision.transforms.Resize
             init_args:
-              size: [504, 504]
+              size: [512, 512]
           # - class_path: geoloc.data.transforms.CircleMaskCrop
           # - class_path: torchvision.transforms.RandomRotation
           #   init_args:
@@ -78,7 +78,7 @@ logger: # WandbLogger config
   save_dir: /home/grega/geoloc/logs/
 
 build_config: !include
-  file: contrastive/VPAir/contrastive_build.yaml
+  file: contrastive_build.yaml
   keys:
     - vdb
     - dataset

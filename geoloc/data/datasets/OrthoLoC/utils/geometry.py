@@ -9,6 +9,7 @@ from matplotlib.colors import to_rgb
 import matplotlib.patches as mpatches
 
 from . import image
+from ..correspondences.Correspondences2D2D import Correspondences2D2D
 
 ##################################
 # Transforms
@@ -174,30 +175,30 @@ def sample_grid(grid: np.ndarray, pts2d: np.ndarray, mode: str = 'nearest', alig
     return sampled_points
 
 
-# def compute_dist(grid3d_0: np.ndarray, grid3d_1: np.ndarray, correspondences_2d2d: Correspondences2D2D,
-#                  mode: str = 'nearest', align_corners: bool | None = True):
-#     """
-#     Compute the distance between corresponding 3D points sampled from two grids.
+def compute_dist(grid3d_0: np.ndarray, grid3d_1: np.ndarray, correspondences_2d2d: Correspondences2D2D,
+                 mode: str = 'nearest', align_corners: bool | None = True):
+    """
+    Compute the distance between corresponding 3D points sampled from two grids.
 
-#     Args:
-#         grid3d_0: First 3D grid (H0, W0, C).
-#         grid3d_1: Second 3D grid (H1, W1, C).
-#         correspondences_2d2d: 2D-2D correspondences object.
-#         mode: Interpolation mode ('nearest' or 'bilinear').
-#         align_corners: Whether to align corners for interpolation.
+    Args:
+        grid3d_0: First 3D grid (H0, W0, C).
+        grid3d_1: Second 3D grid (H1, W1, C).
+        correspondences_2d2d: 2D-2D correspondences object.
+        mode: Interpolation mode ('nearest' or 'bilinear').
+        align_corners: Whether to align corners for interpolation.
 
-#     Returns:
-#         A numpy array of distances between corresponding 3D points.
-#     """
-#     h0, w0 = grid3d_0.shape[:2]
-#     h1, w1 = grid3d_1.shape[:2]
-#     correspondences_2d2d = correspondences_2d2d.normalized(w0=w0, h0=h0, w1=w1, h1=h1)
-#     x0, x0in1 = correspondences_2d2d.pts0, correspondences_2d2d.pts1
-#     pts3d_0 = sample_grid(grid3d_0, x0, mode=mode, align_corners=align_corners,
-#                           is_normalized=correspondences_2d2d.is_normalized)
-#     pts3d_1 = sample_grid(grid3d_1, x0in1, mode=mode, align_corners=align_corners,
-#                           is_normalized=correspondences_2d2d.is_normalized)
-#     return np.linalg.norm(pts3d_0 - pts3d_1, axis=-1)
+    Returns:
+        A numpy array of distances between corresponding 3D points.
+    """
+    h0, w0 = grid3d_0.shape[:2]
+    h1, w1 = grid3d_1.shape[:2]
+    correspondences_2d2d = correspondences_2d2d.normalized(w0=w0, h0=h0, w1=w1, h1=h1)
+    x0, x0in1 = correspondences_2d2d.pts0, correspondences_2d2d.pts1
+    pts3d_0 = sample_grid(grid3d_0, x0, mode=mode, align_corners=align_corners,
+                          is_normalized=correspondences_2d2d.is_normalized)
+    pts3d_1 = sample_grid(grid3d_1, x0in1, mode=mode, align_corners=align_corners,
+                          is_normalized=correspondences_2d2d.is_normalized)
+    return np.linalg.norm(pts3d_0 - pts3d_1, axis=-1)
 
 
 def create_grid_pts2d(w: int, h: int, normalized: bool = False) -> np.ndarray:

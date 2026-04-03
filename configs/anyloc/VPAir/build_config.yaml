@@ -13,7 +13,6 @@ dataset:
   init_args:
     root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
     include_distractors: False
-    # canonical_ori: True
 
 vdb:
   class_path: geoloc.data.vdb.VectorDatabase

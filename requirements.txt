@@ -25,7 +25,7 @@ rasterio
 # pretrained backbones
 transformers==4.57.3
 
---extra-index-url https://download.pytorch.org/whl/cu128
+--extra-index-url https://download.pytorch.org/whl/cu110
 torch==2.8.0
 torchmetrics==1.8.2
 torchvision==0.23.0

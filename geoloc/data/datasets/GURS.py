@@ -12,6 +12,10 @@ from rasterio.merge import merge
 from rasterio.windows import Window
 
 from pyproj import Transformer
+# from concurrent.futures import ThreadPoolExecutor
+# from collections import OrderedDict
+# from threading import Lock
+import bisect
 
 class GURSDataset:
     """Base class for GURS datasets."""
@@ -33,7 +37,11 @@ class GURSDataset:
         self.exclude_slo_border_tifs = exclude_slo_border_tifs
         self.num_same_place = num_same_place
         self.tif_h, self.tif_w = 6000, 4500
-        self.crs = "EPSG:3794"
+
+        # as far as I know these two CRS are the same, GURS uses ESRI so I'm sticking with that
+        # self.crs = "EPSG:3794"
+        self.crs = "ESRI:102109"
+
         self.pxl_res = 0.5
 
         self._load_border_multipolygon()
@@ -41,7 +49,8 @@ class GURSDataset:
         if self.exclude_slo_border_tifs:
             self._remove_slo_border_tifs()
         self._load_unique_tifs()
-        if self.border != "Slovenija":
+        # if self.border != "Slovenija":
+        if "Slovenija" not in self.border:
             self._remove_outside_border_tifs()
         self._load_discretized_border()
         self.min_east, self.min_north, self.max_east, self.max_north = (
@@ -59,12 +68,21 @@ class GURSDataset:
 
     def _load_border_multipolygon(self):
         all_borders_gdf = gpd.read_file(os.path.join(self.root, "borders.geojson"))
-        assert (
-            self.border in all_borders_gdf["NAZIV"].values
-        ), f"Border {self.border} not found in borders.geojson"
+        border_names = [b.strip() for b in self.border.split("+")]
+        # all_border_polygons = []
+        for name in border_names:
+            assert (
+                name in all_borders_gdf["NAZIV"].values
+            ), f"Border {name} not found in borders.geojson"
         self.border_polygon = all_borders_gdf[
-            all_borders_gdf["NAZIV"] == self.border
-        ].geometry.values[0]
+            all_borders_gdf["NAZIV"].isin(border_names)
+        ].geometry.union_all()
+        #     curr_border_polygon = all_borders_gdf[
+        #         all_borders_gdf["NAZIV"] == name
+        #     ].geometry.values[0]
+        #     all_border_polygons.append(curr_border_polygon)
+        # self.border_polygon = shapely.coverage_union(*all_border_polygons)
+
 
     def _load_discretized_border(self):
         # recreate the border after removing tifs outside the border
@@ -120,6 +138,46 @@ class GURSDataset:
                 )
             )
         return combined_dfs
+    
+    def get_data_from_footprint(self, footprint):
+        win_bounds = box(*footprint.bounds)
+        relevant_tifs = self._get_all_relevant_tifs_for_window(win_bounds)
+        assert len(relevant_tifs) >= self.num_same_place
+        relevant_tifs = relevant_tifs[-self.num_same_place :]
+        
+        if len(relevant_tifs) < 1:
+            print(f"No relevant tifs found for footprint with bounds: {footprint.bounds}. Make sure you are using the correct CRS and that the footprint is within the border.")
+            return None
+
+        datas = []
+        for tifs in relevant_tifs:
+            src_files = []
+            for _, row in tifs.iterrows():
+                src = rasterio.open(
+                    os.path.join(self.root, str(row["YEAR"]), row["AREA_CODE"], row["DATOTEKA"]), mode="r+"
+                )
+                if src.crs != self.crs: # Hack to avoid CRS mismatch error (Some tifs have ETRS_1989_Slovenia_TM, while majority have ESRI:102109)
+                    src.crs = self.crs 
+                src_files.append(src)
+            mosaic, _ = merge(src_files, bounds=win_bounds.bounds)
+            mosaic = torch.from_numpy(mosaic).float() / 255.0
+            assert mosaic.shape[0] == 3, f"Mosaic channel mismatch: {mosaic.shape}"
+            for src in src_files:
+                src.close()
+            datas.append(mosaic)
+        datas = torch.stack(datas, dim=0)
+        return dict(
+            image=datas,
+            east=(win_bounds.bounds[0] + win_bounds.bounds[2]) / 2,
+            north=(win_bounds.bounds[1] + win_bounds.bounds[3]) / 2,
+            geometry=win_bounds
+        )
+    
+    def get_data_from_cpoint(self, east, north, width=None, height=None):
+        width = width if width else self.tile_size
+        height = height if height else self.tile_size
+        win_bounds = box(east - width/2, north - height/2, east + width/2, north + height/2)
+        return self.get_data_from_footprint(win_bounds)  
 
 
 class SequentialGURSDataset(GURSDataset, torch.utils.data.Dataset):
@@ -165,10 +223,24 @@ class SequentialGURSDataset(GURSDataset, torch.utils.data.Dataset):
         self.all_windows = self.all_windows[
             prep_disc_border_polygon.contains(self.all_windows.geometry)
         ]
-        self.all_windows = self.all_windows.reset_index()
+        self.all_windows = self.all_windows.reset_index(drop=True)
 
     def __len__(self):
         return len(self.all_windows)
+
+    def get_coords_only(self, index):
+        win_bounds = self.all_windows.iloc[index].geometry
+        east = (win_bounds.bounds[0] + win_bounds.bounds[2]) / 2
+        north = (win_bounds.bounds[1] + win_bounds.bounds[3]) / 2
+        return east, north
+    
+    def get_tile(self, lon, lat, crs="EPSG:4326"):
+        east, north = Transformer.from_crs(crs, self.crs, always_xy=True).transform(lon, lat)
+        point = shapely.geometry.Point(east, north)
+        index = self.all_windows[self.all_windows.geometry.contains(point)].index
+        if len(index) == 0:
+            return None
+        return self.__getitem__(index[0])
 
 
 class SequentialWindowGURSDataset(SequentialGURSDataset):
@@ -218,20 +290,21 @@ class GURSReferenceDataset(SequentialGURSDataset):
     """Reference GURS dataset, which returns the latest available image for each window.
     More efficient than SequentialWindowGURSDataset."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, transforms=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.transforms = transforms
 
     def __getitem__(self, index):
         win_bounds = self.all_windows.iloc[index].geometry
         relevant_tifs = self._get_latest_relevant_tifs_for_window(win_bounds)
-        src_files = [
-            rasterio.open(
-                os.path.join(
-                    self.root, str(row["YEAR"]), row["AREA_CODE"], row["DATOTEKA"]
-                )
+        src_files = []
+        for _, row in relevant_tifs.iterrows():
+            src = rasterio.open(
+                os.path.join(self.root, str(row["YEAR"]), row["AREA_CODE"], row["DATOTEKA"]), mode="r+"
             )
-            for _, row in relevant_tifs.iterrows()
-        ]
+            if src.crs != self.crs: # Hack to avoid CRS mismatch error (Some tifs have ETRS_1989_Slovenia_TM, while majority have ESRI:102109)
+                src.crs = self.crs 
+            src_files.append(src)
         mosaic, _ = merge(src_files, bounds=win_bounds.bounds)
         mosaic = torch.from_numpy(mosaic).float() / 255.0
         assert mosaic.shape == (
@@ -243,27 +316,150 @@ class GURSReferenceDataset(SequentialGURSDataset):
             src.close()
         east = (win_bounds.bounds[0] + win_bounds.bounds[2]) / 2
         north = (win_bounds.bounds[1] + win_bounds.bounds[3]) / 2
+
+        if self.transforms is not None:
+            mosaic = self.transforms(mosaic)
+
         return dict(
             image=mosaic,
             filename=relevant_tifs["DATOTEKA"].values[0],
             index=index,
             east=east,
             north=north,
+            geometry=win_bounds
         )
+    def _get_gt_windows(self, footprint, overlap_threshold=0.5):
+        candidates = self.all_windows[self.all_windows.intersects(footprint)]
+        intersection_area = candidates.intersection(footprint).area
+        overlap_ratio = np.maximum(
+            intersection_area / candidates.area,
+            intersection_area / footprint.area
+        )
+        return candidates[overlap_ratio >= overlap_threshold]
 
-    def get_eastnorth_only(self, index):
-        win_bounds = self.all_windows.iloc[index].geometry
-        east = (win_bounds.bounds[0] + win_bounds.bounds[2]) / 2
-        north = (win_bounds.bounds[1] + win_bounds.bounds[3]) / 2
-        return east, north
+
+class MultiTileSizeGURSReferenceDataset(torch.utils.data.Dataset):
+
+    def __init__(self, tile_sizes, strides, transforms=None, *args, **kwargs):
+        super().__init__()
+        assert len(tile_sizes) == len(strides), "Tile sizes and strides must have the same length"
+        
+        self.transforms = transforms
+        self.crs = "ESRI:102109"
+        self.pxl_res = 0.5
+
+        self._datasets = []
+        for tile_size, stride in zip(tile_sizes, strides):
+            ds = GURSReferenceDataset(
+                tile_size=tile_size, stride=stride, transforms=transforms, *args, **kwargs
+            )
+            self._datasets.append(ds)
+
+        self._boundaries = []
+        total = 0
+        for ds in self._datasets:
+            total += len(ds)
+            self._boundaries.append(total)
+
+        self.num_tiles_height = max(ds.num_tiles_height for ds in self._datasets)
+        self.num_tiles_width  = max(ds.num_tiles_width  for ds in self._datasets)
+
+        # self.info             = self._datasets[0].info
+        # self.border_polygon   = self._datasets[0].border_polygon
+        # self.disc_border_polygon = self._datasets[0].disc_border_polygon
+        # self.root             = self._datasets[0].root
+        # self.border           = self._datasets[0].border
+
+    def _route(self, index):
+        ds_idx = bisect.bisect_left(self._boundaries, index + 1)  # +1 because boundaries are right-exclusive
+        local_idx = index if ds_idx == 0 else index - self._boundaries[ds_idx - 1]
+        return self._datasets[ds_idx], local_idx
+
+    def __len__(self):
+        return self._boundaries[-1]
+
+    def __getitem__(self, index):
+        ds, local_idx = self._route(index)
+        return ds[local_idx]
+
+    def get_coords_only(self, index):
+        ds, local_idx = self._route(index)
+        return ds.get_coords_only(local_idx)
+
+    def get_tile_size_for_index(self, index):
+        ds, _ = self._route(index)
+        return ds.tile_size
+
+    def get_tile(self, lon, lat, crs = "EPSG:4326"):
+        for ds in self._datasets:
+            result = ds.get_tile(lon, lat, crs=crs)
+            if result is not None:
+                return result
+        return None
+
+    def _get_gt_windows(self, footprint, overlap_threshold = 0.5):
+        gt_windows = []
+        for i, ds in enumerate(self._datasets):
+            curr_gt_windows = ds._get_gt_windows(footprint, overlap_threshold)
+            curr_gt_windows.index = curr_gt_windows.index + (self._boundaries[i-1] if i > 0 else 0)
+            gt_windows.append(curr_gt_windows)
+        return pd.concat(gt_windows, ignore_index=False)
+        # return pd.concat(
+        #     [ds._get_gt_windows(footprint, overlap_threshold) for ds in self._datasets],
+        #     ignore_index=False,
+        # )
     
-    def get_tile(self, lon, lat, crs="EPSG:4326"):
-        east, north = Transformer.from_crs(crs, self.crs, always_xy=True).transform(lon, lat)
-        point = shapely.geometry.Point(east, north)
-        index = self.all_windows[self.all_windows.geometry.contains(point)].index
-        if len(index) == 0:
-            return None
-        return self.__getitem__(index[0])
+    def get_data_from_footprint(self, footprint):
+        for ds in self._datasets:
+            result = ds.get_data_from_footprint(footprint)
+            if result is not None:
+                return result
+        return None
+
+
+# class MultiTileSizeGURSReferenceDataset(torch.utils.data.Dataset):
+
+#     def __init__(self, tile_sizes, strides, *args, **kwargs):
+#         super().__init__()
+#         assert len(tile_sizes) == len(strides), "Tile sizes and strides must have the same length"
+#         self.datasets = []
+#         self.crs = "ESRI:102109"
+#         self.pxl_res = 0.5
+#         self.dataset_lens = []
+#         for tile_size, stride in zip(tile_sizes, strides):
+#             dataset = GURSReferenceDataset(tile_size=tile_size, stride=stride, *args, **kwargs)
+#             self.datasets.append(dataset)
+#             self.dataset_lens.append(len(dataset))
+#         self.num_tiles_height = max([ds.num_tiles_height for ds in self.datasets])
+#         self.num_tiles_width = max([ds.num_tiles_width for ds in self.datasets])
+#         self.datasets = torch.utils.data.ConcatDataset(self.datasets)
+
+#     def __len__(self):
+#         return len(self.datasets)
+
+#     def __getitem__(self, index):
+#         return self.datasets[index]
+
+#     def get_tile_size_for_index(self, index):
+#         dataset_index = 0
+#         while index >= self.dataset_lens[dataset_index]:
+#             index -= self.dataset_lens[dataset_index]
+#             dataset_index += 1
+#         return self.datasets.datasets[dataset_index].tile_size
+
+#     def get_coords_only(self, index):
+#         dataset_index = 0
+#         while index >= self.dataset_lens[dataset_index]:
+#             index -= self.dataset_lens[dataset_index]
+#             dataset_index += 1
+#         return self.datasets.datasets[dataset_index].get_coords_only(index)
+    
+#     def _get_gt_windows(self, footprint, overlap_threshold=0.5):
+#         gt_windows = []
+#         for dataset in self.datasets:
+#             gt_windows.append(dataset._get_gt_windows(footprint, overlap_threshold))
+#         return pd.concat(gt_windows, ignore_index=True)
+
 
 
 class TrainGURSDataset(GURSDataset, torch.utils.data.Dataset):

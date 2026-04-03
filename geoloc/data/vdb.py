@@ -8,6 +8,16 @@ from torch.nn import functional as F
 import torchvision.transforms.functional as TF
 
 try:
+    from sklearn.neighbors import BallTree
+except ImportError:
+    BallTree = None
+
+try:
+    from scipy.spatial import KDTree
+except ImportError as e:
+    KDTree = None
+
+try:
     from asmk import asmk_method
     from asmk import io_helpers
 except ImportError:
@@ -40,6 +50,60 @@ class VectorDatabase:
         
         self.theta_buffer = []
         self.imInd_buffer = []
+        
+        self.spatial_index = None
+        self.spatial_coords = None
+        self.spatial_crs = None
+
+    def set_spatial_index(self, coords: np.ndarray, crs: str = "EPSG:4326"):
+        coords = np.asarray(coords)
+        assert coords.ndim == 2 and coords.shape[1] == 2, "`coords` must have shape (N, 2) with [y, x] ordering"
+        assert coords.shape[0] == self.size(), (
+            f"Number of spatial coordinates ({coords.shape[0]}) must match DB size ({self.size()})"
+        )
+
+        self.spatial_coords = coords.astype(np.float64)
+        self.spatial_crs = crs
+
+        if crs == "EPSG:4326":
+            assert BallTree is not None, "BallTree is required for WGS84 radius search. Install scikit-learn."
+            coords_rad = np.radians(self.spatial_coords)
+            self.spatial_index = BallTree(coords_rad, metric="haversine")
+        else:
+            assert KDTree is not None, "KDTree is required for projected radius search. Install scipy."
+            self.spatial_index = KDTree(self.spatial_coords)
+
+    def _radius_filter_ids(self, query_y: float, query_x: float, radius_m: float):
+        assert self.spatial_index is not None, "Spatial index not initialized. Call `set_spatial_index(...)` first."
+        assert self.spatial_coords is not None, "Spatial coordinates not initialized."
+
+        if self.spatial_crs == "WGS84":
+            center_rad = np.radians([[query_y, query_x]])
+            radius_rad = radius_m / 6_371_000.0
+            ids = self.spatial_index.query_radius(center_rad, r=radius_rad)[0]
+        else:
+            ids = self.spatial_index.query_ball_point([query_y, query_x], r=radius_m)
+            ids = np.asarray(ids)
+
+        return ids.astype(np.int64)
+
+    def search_radius(self, qu: torch.Tensor, k: int, query_y: float, query_x: float, radius_m: float):
+        assert not self.faiss_gpu, "Radius search with IDSelector is only supported when `faiss_gpu=False`."
+
+        valid_ids = self._radius_filter_ids(query_y=query_y, query_x=query_x, radius_m=radius_m)
+        if len(valid_ids) == 0:
+            empty_d = np.empty((qu.shape[0], 0), dtype=np.float32)
+            empty_i = np.empty((qu.shape[0], 0), dtype=np.int64)
+            return empty_d, empty_i
+
+        if self.norm_vec:
+            qu = F.normalize(qu)
+
+        selector = faiss.IDSelectorBatch(valid_ids)
+        params = faiss.SearchParameters()
+        params.sel = selector
+        distances, indices = self.faiss_index.search(qu.cpu().numpy(), k, params=params)
+        return distances, indices
 
     def add(self, vectors: torch.Tensor):
         if self.norm_vec:

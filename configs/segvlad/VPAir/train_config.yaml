@@ -34,7 +34,7 @@ dataset:
   # class_path: geoloc.data.datasets.VPAir.VPAirTestDatasetReferenceImages
   init_args:
     root: /storage/datasets/AerialLoc/Drone2Sat/VPAir
-    include_distractors: False
+    include_distractors: True
 
 dataloader:
   batch_size: 1

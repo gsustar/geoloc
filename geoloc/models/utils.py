@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 import torchvision.transforms.functional as TF
 
 
@@ -32,6 +33,12 @@ def dino_processor(x: torch.Tensor, patch_size: int, return_latent_size: bool = 
     if return_latent_size:
         latent_size = (new_h // patch_size, new_w // patch_size)
         return x, latent_size
+    return x
+
+def radio_processor(x: torch.Tensor):
+    c, h, w = x.shape[-3:]
+    new_h, new_w = (h // 16) * 16, (w // 16) * 16
+    x = TF.resize(x, (new_h, new_w))
     return x
 
 def torch_trace_friendly_dino_processor(x: torch.Tensor, patch_size: int):

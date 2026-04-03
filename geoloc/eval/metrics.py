@@ -35,16 +35,17 @@ def polygon_intersection_metrics(
 
 
 def calculate_distances(
-    qry, benchmark_top_k, inds, qry_image_dataset, ref_image_dataset
+    qry, benchmark_top_k, inds, qry_image_dataset, ref_image_dataset, lon_key, lat_key
 ):
-    qry_point = qry["lon"], qry["lat"]
+    qry_point = qry[lon_key], qry[lat_key]
     qry_point = crs_transform(qry_point, qry_image_dataset.crs, ref_image_dataset.crs)
     ref_points = []
     for cpr_i in range(max(benchmark_top_k)):
         if cpr_i >= inds.shape[1]:
             break
-        ref = ref_image_dataset[(inds[0, cpr_i] % len(ref_image_dataset)).item()]
-        ref_points.append((ref["lon"], ref["lat"]))
+        
+        coords = ref_image_dataset.get_coords_only((inds[0, cpr_i] % len(ref_image_dataset)).item())
+        ref_points.append(coords)
     gdists = np.array(
         [
             distance_between_points(qry_point, ref_point, ref_image_dataset.crs)
@@ -119,32 +120,3 @@ def average_precision(tp_flags):
             tp_cum += 1
             precisions.append(tp_cum / (i + 1))
     return float(np.mean(precisions))
-
-
-# def calculate_intersections(qry, benchmark_top_k, inds, ref_image_dataset):
-# 	gt_pos = []
-# 	intersection_tps = []
-# 	qry_geom = qry["geometry"]
-# 	qry_bounds = qry_geom.bounds
-
-# 	for cpr_i in range(max(benchmark_top_k)):
-# 		if cpr_i >= inds.shape[1]:
-# 			break
-# 		ref_ix = (inds[0, cpr_i] % len(ref_image_dataset)).item()
-# 		ref = ref_image_dataset[ref_ix]
-# 		ref_geom = ref["geometry"]
-
-# 		ref_bounds = ref_geom.bounds
-# 		if (qry_bounds[2] < ref_bounds[0] or qry_bounds[0] > ref_bounds[2] or
-# 			qry_bounds[3] < ref_bounds[1] or qry_bounds[1] > ref_bounds[3]):
-# 			intersection_tps.append(False)
-# 			continue
-
-# 		qry_ioa, ref_ioa, area_imbalance, is_tp = polygon_intersection_metrics(
-# 			qry_geom, ref_geom,
-# 		)
-# 		if is_tp:
-# 			gt_pos.append(ref_ix)
-# 		intersection_tps.append(is_tp)
-
-# 	return gt_pos, intersection_tps

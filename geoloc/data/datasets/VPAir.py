@@ -49,6 +49,7 @@ class VPAirReferenceImages(torch.utils.data.Dataset):
         self,
         root: str,
         include_distractors: bool = True,
+        percent_distractors: float = 1.0,
         canonical_ori: bool = False,
         transforms=None,
     ):
@@ -57,17 +58,21 @@ class VPAirReferenceImages(torch.utils.data.Dataset):
         self.root = root
         self.crs = "EPSG:4326"
         self.include_distractors = include_distractors
+        self.percent_distractors = percent_distractors
 
         self.distractors = _load_distractors(root)
         self.reference_views = _load_reference_views(root, canonical_ori=canonical_ori)
-        self.num_reference_views = len(self.reference_views)
         self.num_distractors = len(self.distractors)
+        self.num_reference_views = len(self.reference_views)
         self.poses = _load_poses(root)
 
         # Optionally include distractors in reference images
         self.reference_images = self.reference_views.copy()
         if self.include_distractors:
+            self.num_distractors = int(self.percent_distractors * self.num_distractors)
+            self.distractors = self.distractors[:self.num_distractors]
             self.reference_images.extend(self.distractors)
+        
 
         del self.distractors
         del self.reference_views
@@ -130,8 +135,15 @@ class VPAirQueryImages(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         img = load_image(self.queries[index])
+        lon = self.poses["lon"].iloc[index]
+        lat = self.poses["lat"].iloc[index]
+        alt = self.poses["altitude"].iloc[index]
+
+        roll = self.poses["roll"].iloc[index]
+        pitch = self.poses["pitch"].iloc[index]
+        yaw = self.poses["yaw"].iloc[index] # This is the CW rotation of drone image wrt north, in radians
+
         if self.north_align:
-            yaw = self.poses["yaw"].iloc[index]
             img = TF.rotate(
                 img,
                 angle=(-yaw * 180.0 / torch.pi).item(),
@@ -141,14 +153,6 @@ class VPAirQueryImages(torch.utils.data.Dataset):
             img = self.transforms(img)
         img = img / 255.0
         filename = os.path.basename(self.queries[index])
-
-        lon = self.poses["lon"].iloc[index]
-        lat = self.poses["lat"].iloc[index]
-        alt = self.poses["altitude"].iloc[index]
-
-        roll = self.poses["roll"].iloc[index]
-        pitch = self.poses["pitch"].iloc[index]
-        yaw = self.poses["yaw"].iloc[index] # This is the CW rotation of drone image wrt north, in radians
 
         gt_pos = np.unique(
             np.clip(
@@ -212,8 +216,16 @@ class VPAirTrainDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         query = load_image(self.queries[index])
+        lon = self.poses["lon"].iloc[index]
+        lat = self.poses["lat"].iloc[index]
+        alt = self.poses["altitude"].iloc[index]
+
+        roll = self.poses["roll"].iloc[index]
+        pitch = self.poses["pitch"].iloc[index]
+        yaw = self.poses["yaw"].iloc[index]
+
         if self.north_align:
-            yaw = self.poses["yaw"].iloc[index]
+            # yaw = self.poses["yaw"].iloc[index]
             query = TF.rotate(
                 query,
                 angle=(-yaw * 180.0 / torch.pi).item(),
@@ -228,15 +240,6 @@ class VPAirTrainDataset(torch.utils.data.Dataset):
         if self.transforms is not None:
             ref = self.transforms(ref)
         ref = ref / 255.0
-
-
-        lon = self.poses["lon"].iloc[index]
-        lat = self.poses["lat"].iloc[index]
-        alt = self.poses["altitude"].iloc[index]
-
-        roll = self.poses["roll"].iloc[index]
-        pitch = self.poses["pitch"].iloc[index]
-        yaw = self.poses["yaw"].iloc[index]
 
         imgs = torch.stack([query, ref], dim=0)
         return dict(
@@ -320,12 +323,14 @@ class VPAirTestDatasetReferenceImages(VPAirReferenceImages):
         self,
         root: str,
         include_distractors: bool = True,
+        percent_distractors: float = 1.0,
         canonical_ori: bool = False,
         transforms=None,
     ):
         super().__init__(
             root=root,
             include_distractors=include_distractors,
+            percent_distractors=percent_distractors,
             canonical_ori=canonical_ori,
             transforms=transforms,
         )
