@@ -3,7 +3,11 @@ import cv2
 
 import torchvision.transforms.functional as TF
 
-from geoloc.third_party.RoMa.romatch import roma_outdoor
+# from geoloc.third_party.RoMa.romatch import roma_outdoor
+from romatch import roma_outdoor
+from loma import LoMa, LoMaB
+from loma.loma import to_pixel_coords, filter_matches
+
 from geoloc.data.utils import collate_with_geometry
 
 
@@ -62,6 +66,7 @@ class RomaMatchAnythingMatcher(torch.nn.Module):
         self.upsample_res = upsample_res
         self.upsample_preds = upsample_preds
         self.num_sample_keypoints = num_sample_keypoints
+        self.do_compile = do_compile
 
         self.matcher = roma_outdoor(
             device=self.device, 
@@ -115,6 +120,50 @@ class RomaMatchAnythingMatcher(torch.nn.Module):
         all_kptsA = torch.stack(all_kptsA, dim=0)
         all_kptsB = torch.stack(all_kptsB, dim=0)
         return all_kptsA, all_kptsB
+
+
+class LoMaMatcher(torch.nn.Module):
+    def __init__(self, resolution=448, do_compile=False):
+        super().__init__()
+        self.matcher = LoMa(LoMaB(compile=do_compile))
+        self.coarse_res = resolution # NOTE: strictly for compatibility with RomaMatcher, LoMa doesn't actually have a coarse stage
+        self.do_compile = do_compile
+        self.num_sample_keypoints = self.matcher.cfg.num_keypoints
+
+    def forward(self, qry_batch, ref_batch):
+        qry_batch = TF.resize(qry_batch, size=(self.coarse_res, self.coarse_res))
+        ref_batch = TF.resize(ref_batch, size=(self.coarse_res, self.coarse_res))
+        with torch.no_grad():
+            keypoints_A, descriptors_A, h1, w1 = self.matcher.detect_and_describe(qry_batch, self.matcher.cfg.num_keypoints)
+            keypoints_B, descriptors_B, h2, w2 = self.matcher.detect_and_describe(ref_batch, self.matcher.cfg.num_keypoints)
+
+            scores = self.matcher(keypoints_A, keypoints_B, descriptors_A, descriptors_B)["scores"]
+            m0, _, _, _ = filter_matches(scores, self.matcher.cfg.filter_threshold)
+
+            all_kptsA = []
+            all_kptsB = []
+            # all_valid = []
+            for i in range(qry_batch.shape[0]):
+                valid = m0[i] > -1
+
+                matched_A = keypoints_A[i][torch.where(valid)[0]]
+                matched_B = keypoints_B[i][m0[i][valid]]
+
+                matched_A = to_pixel_coords(matched_A, h1, w1)
+                matched_B = to_pixel_coords(matched_B, h2, w2)
+
+                matched_A = torch.nn.functional.pad(matched_A, (0, 0, 0, self.matcher.cfg.num_keypoints - matched_A.shape[0]), value=-1.0)
+                matched_B = torch.nn.functional.pad(matched_B, (0, 0, 0, self.matcher.cfg.num_keypoints - matched_B.shape[0]), value=-1.0)
+
+                all_kptsA.append(matched_A)
+                all_kptsB.append(matched_B)
+                # all_valid.append(valid)
+
+            matched_A = torch.stack(all_kptsA, dim=0)
+            matched_B = torch.stack(all_kptsB, dim=0)
+            # valid = torch.stack(all_valid, dim=0)
+
+            return matched_A, matched_B
 
 
 def estimate_homography(kptsA, kptsB, ransac):

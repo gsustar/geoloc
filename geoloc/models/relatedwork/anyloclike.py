@@ -6,8 +6,9 @@ from ..vprmodel import VPRModel
 from ...utils import DEBUG
 
 class AnyLocLikeModel(VPRModel):
-    def __init__(self, fit_step=1, **kwargs):
+    def __init__(self, pca=None, fit_step=1, **kwargs):
         super().__init__(**kwargs)
+        self.pca = pca
         self.fit_step = fit_step
         self._is_fitted = False
         self.automatic_optimization = False

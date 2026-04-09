@@ -2,6 +2,8 @@ import os
 import cv2
 import torch
 import numpy as np
+from PIL import Image, ImageDraw
+from pathlib import Path
 import matplotlib.pyplot as plt
 import torchvision.transforms.functional as TF
 
@@ -288,3 +290,35 @@ def visualize_similarity_heatmap_visloc(
     )
     plt.savefig(save_path, dpi=DPI)
     plt.close(fig)
+
+
+def visualize_matches(im_A, im_B, kpts_A, kpts_B, save_path=None, multicolor=False):
+    h1, w1 = im_A.shape[-2:]
+    h2, w2 = im_B.shape[-2:]
+
+    im_A = im_A.detach().cpu().numpy() * 255
+    im_B = im_B.detach().cpu().numpy() * 255
+    im_A = im_A.astype(np.uint8)
+    im_B = im_B.astype(np.uint8)
+
+    canvas = Image.new("RGB", (w1 + w2, max(h1, h2)))
+    canvas.paste(Image.fromarray(im_A.transpose(1, 2, 0)), (0, 0))
+    canvas.paste(Image.fromarray(im_B.transpose(1, 2, 0)), (w1, 0))
+    draw = ImageDraw.Draw(canvas)
+    rng = np.random.default_rng(0)
+
+    color = "green"
+    for (x1, y1), (x2, y2) in zip(kpts_A, kpts_B):
+        if multicolor:
+            color = tuple(rng.integers(0, 256, 3).tolist())    
+        draw.line([(x1, y1), (x2 + w1, y2)], fill=color, width=1)
+
+    if save_path is not None:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        canvas.save(save_path)
+        print(f"Saved {len(kpts_A)} matches to {save_path}")
+    else:
+        plt.figure(figsize=(10, 10))
+        plt.imshow(canvas)
+        plt.axis("off")
+        plt.show()

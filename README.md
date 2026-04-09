@@ -8,7 +8,7 @@ conda activate geoloc
 # install requirements
 ### (For most cases)
 pip install -r requirements.txt         
-conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.13.1
+conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
 
 ### (For NVIDIA Jetson AGX Thor) - [ARM64 with Jetpack 7.0 and CUDA 13.0]
 pip install -r requirements_thor.txt

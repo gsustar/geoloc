@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torchvision.models as tvm
-# from romatch.utils.utils import get_autocast_params
-from ..utils.utils import get_autocast_params
+from romatch.utils.utils import get_autocast_params
+# from ..utils.utils import get_autocast_params
 
 class VGG19(nn.Module):
     def __init__(self, pretrained=True, amp = False, amp_dtype = torch.float16) -> None:
@@ -62,8 +62,6 @@ class CNNandDinov2(nn.Module):
             with torch.no_grad():
                 if self.dinov2_vitl14.device != x.device:
                     self.dinov2_vitl14 = self.dinov2_vitl14.to(x.device).to(self.amp_dtype)
-                # self.dinov2_vitl14 = self.dinov2_vitl14.to(x.device).to(self.amp_dtype)
-                # dinov2_features_16 = self.dinov2_vitl14.forward_features(x.to(self.amp_dtype))
                 dinov2_features_16 = self.dinov2_vitl14.forward_features(x)
                 # if self.dinov2_vitl14[0].device != x.device:
                 #     self.dinov2_vitl14[0] = self.dinov2_vitl14[0].to(x.device).to(self.amp_dtype)

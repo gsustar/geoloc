@@ -6,26 +6,26 @@ import torch
 import torch.nn as nn
 from loguru import logger
 
-# from romatch.models.encoders import CNNandDinov2
-# from romatch.models.matcher import (
-#     GP,
-#     ConvRefiner,
-#     CosKernel,
-#     Decoder,
-#     RegressionMatcher,
-# )
-# from romatch.models.tiny import TinyRoMa
-# from romatch.models.transformer import Block, MemEffAttention, Attention, TransformerDecoder
-from ...models.encoders import CNNandDinov2
-from ...models.matcher import (
+from romatch.models.encoders import CNNandDinov2
+from romatch.models.matcher import (
     GP,
     ConvRefiner,
     CosKernel,
     Decoder,
     RegressionMatcher,
 )
-from ...models.transformer import Block, MemEffAttention, Attention, TransformerDecoder
-from ...models.tiny import TinyRoMa
+from romatch.models.tiny import TinyRoMa
+from romatch.models.transformer import Block, MemEffAttention, Attention, TransformerDecoder
+# from ...models.encoders import CNNandDinov2
+# from ...models.matcher import (
+#     GP,
+#     ConvRefiner,
+#     CosKernel,
+#     Decoder,
+#     RegressionMatcher,
+# )
+# from ...models.transformer import Block, MemEffAttention, Attention, TransformerDecoder
+# from ...models.tiny import TinyRoMa
 
 
 def tiny_roma_v1_model(

@@ -1,21 +1,31 @@
 model:
   class_path: geoloc.models.contrastive.ContrastiveModel
   init_args:
-    backbone:
-      class_path: geoloc.models.backbones.RADIOBackbone
+    # backbone:
+    #   class_path: geoloc.models.backbones.RADIOBackbone
+    #   init_args:
+    #     model_name: radio_v2.5-b
+    #     return_cls_token: True
+    #     out_indices: auto
+    #     out_channels: 768
+    # aggregator:
+    #   class_path: geoloc.models.aggregators.SALAD
+    #   init_args:
+    #     num_channels: 768
+    #     num_token_channels: 768
+    #     num_clusters: 64
+    #     cluster_dim: 128
+    #     token_dim: 256
+    backbone: 
+      class_path: geoloc.models.backbones.UltraVPRBackbone
       init_args:
-        model_name: c-radio_v4-h
-        return_cls_token: True
-        out_indices: auto
-        out_channels: 1280
+        ckpt_path: "/storage/datasets/AerialLoc/Drone2Sat/ckpts/E2ResNet/epoch_100.pth"
+        freeze_backbone: False
     aggregator:
-      class_path: geoloc.models.aggregators.SALAD
+      class_path: geoloc.models.aggregators.se2gem
       init_args:
-        num_channels: 1280
-        num_token_channels: 2560
-        num_clusters: 128
-        cluster_dim: 128
-        token_dim: 256
+        in_dim: 256
+        out_dim: 256
     optimizer:
       class_path: torch.optim.AdamW
       init_args:
@@ -35,7 +45,7 @@ model:
 dataset:
   class_path: geoloc.data.datasets.BigBoy.BigBoyTrainDataset
   init_args:
-    noaformx: True
+    noaformx: False
     transforms:
       class_path: torchvision.transforms.Compose
       init_args:
@@ -60,7 +70,8 @@ dataset:
               degrees: 180
 
 dataloader:
-  batch_size: 64
+  # batch_size: 64
+  batch_size: 32
   num_workers: 2
   shuffle: True
   drop_last: True

@@ -1,4 +1,4 @@
-VISUALIZE_TOP_K: False
+VISUALIZE_TOP_K: True
 VISUALIZE_HEATMAP: False
 SAVE_SALAD_MATRIX: False
 
@@ -12,8 +12,8 @@ benchmark_recall_at_xmeters: [100, 150, 200, 250, 500, 1000]
 dataset:
   class_path: geoloc.data.datasets.ViCoS.AformXQueryImages
   init_args:
-    query_dir: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part3
-    metadata_path: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part3_3fps_1080p_telemetry.csv
+    query_dir: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part2
+    metadata_path: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part2_3fps_1080p_telemetry.csv
     skip_first_n_frames: 600
     skip_last_n_frames: 600
     transforms:
@@ -31,13 +31,17 @@ reranking:
   batch_size: 1
   # rotations: [0, 90, 180, 270]
   matcher:
+    # class_path: geoloc.models.reranking.LoMaMatcher
+    # init_args:
+    #   resolution: 448
+    #   do_compile: True
     class_path: geoloc.models.reranking.RomaMatchAnythingMatcher
     init_args:
       weights_path: /storage/datasets/AerialLoc/Drone2Sat/ckpts/matchanything_weights/matchanything_roma.ckpt
       coarse_res: 448 
       upsample_preds: False
       symmetric: False
-      num_sample_keypoints: 3840
+      num_sample_keypoints: 5000
       do_compile: False
 
   ransac:

@@ -200,3 +200,7 @@ def requires_arg(func, arg_name):
             inspect.Parameter.VAR_KEYWORD,
         )
     )
+
+def hasarg(func, arg_name):
+    sig = inspect.signature(func)
+    return arg_name in sig.parameters

@@ -96,7 +96,7 @@ def segvlad_get_matches(dists, inds, ref_imInds, n=5):
 
 def inlier_distribution_check(all_num_inliers, threshold = 0.90, max_keypoints=5000):
     pct_inliers_top1 = all_num_inliers[0] / max_keypoints
-    diff_top1_vs_10 = (all_num_inliers[0] - all_num_inliers[9]) / max(all_num_inliers)
+    diff_top1_vs_10 = (all_num_inliers[0] - all_num_inliers[9]) / (max(all_num_inliers) + 1e-8)
     combined_metric = pct_inliers_top1 + diff_top1_vs_10
     passed = False
     if combined_metric > threshold:

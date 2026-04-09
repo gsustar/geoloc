@@ -9,26 +9,26 @@ from einops import rearrange
 from warnings import warn
 from PIL import Image
 
-# from romatch.utils import get_tuple_transform_ops
-# from romatch.utils.local_correlation import local_correlation
-# from romatch.utils.utils import (
-#     check_rgb,
-#     cls_to_flow_refine,
-#     get_autocast_params,
-#     check_not_i16,
-# )
-# from romatch.utils.kde import kde
-# from romatch.models.encoders import CNNandDinov2
-from ..utils import get_tuple_transform_ops
-from ..utils.local_correlation import local_correlation
-from ..utils.utils import (
+from romatch.utils import get_tuple_transform_ops
+from romatch.utils.local_correlation import local_correlation
+from romatch.utils.utils import (
     check_rgb,
     cls_to_flow_refine,
     get_autocast_params,
     check_not_i16,
 )
-from ..utils.kde import kde
-from .encoders import CNNandDinov2
+from romatch.utils.kde import kde
+from romatch.models.encoders import CNNandDinov2
+# from ..utils import get_tuple_transform_ops
+# from ..utils.local_correlation import local_correlation
+# from ..utils.utils import (
+#     check_rgb,
+#     cls_to_flow_refine,
+#     get_autocast_params,
+#     check_not_i16,
+# )
+# from ..utils.kde import kde
+# from .encoders import CNNandDinov2
 
 class ConvRefiner(nn.Module):
     def __init__(
@@ -346,12 +346,11 @@ class GP(nn.Module):
             mu_x = K_xy.matmul(K_yy_inv.matmul(f))
         else:
             # faster inference, possibly also useful for training
-
-            with torch.amp.autocast(dtype=torch.float32, device_type=x.device.type):
-                L_t = torch.linalg.cholesky(K_yy + sigma_noise)
-                pos_emb = torch.cholesky_solve(f.reshape(b, h2 * w2, d).float(), L_t.float(), upper=False)
-                # pos_emb = conjugate_gradient(K_yy + sigma_noise, f, num_iters=50)
-                mu_x = K_xy @ pos_emb
+            # with torch.amp.autocast(dtype=torch.float32, device_type=x.device.type):
+            L_t = torch.linalg.cholesky(K_yy + sigma_noise)
+            pos_emb = torch.cholesky_solve(f.reshape(b, h2 * w2, d).float(), L_t.float(), upper=False)
+            # pos_emb = conjugate_gradient(K_yy + sigma_noise, f, num_iters=50)
+            mu_x = K_xy @ pos_emb
         mu_x = rearrange(mu_x, "b (h w) d -> b d h w", h=h1, w=w1)
 
 

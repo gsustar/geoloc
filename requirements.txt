@@ -1,8 +1,8 @@
 tqdm
-numpy
+numpy==1.26.4
 pandas
 matplotlib
-opencv-python
+opencv-python==4.10.0.84
 scikit-learn
 scipy
 prettytable
@@ -14,7 +14,7 @@ kornia
 einops
 lightning
 fast-pytorch-kmeans
-xformers==0.0.32.post1
+xformers==0.0.35
 
 # geospatial libraries
 geopandas
@@ -25,10 +25,10 @@ rasterio
 # pretrained backbones
 transformers==4.57.3
 
---extra-index-url https://download.pytorch.org/whl/cu110
-torch==2.8.0
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.10.0
 torchmetrics==1.8.2
-torchvision==0.23.0
+torchvision==0.25.0
 
 wandb
 huggingface_hub

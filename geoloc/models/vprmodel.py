@@ -6,7 +6,7 @@ from lightning.pytorch.utilities import grad_norm
 
 from ..config_parser import class_from_config
 from ..pipeline.benchmark import benchmark_single, get_dataset_type, get_model_type
-from ..utils import DEBUG
+from ..utils import DEBUG, hasarg
 
 class VPRModel(L.LightningModule):
     def __init__(
@@ -15,7 +15,7 @@ class VPRModel(L.LightningModule):
         aggregator,
         rotator=None,
         # segmentor=None,
-        pca=None,
+        # pca=None,
         optimizer=None,
         scheduler=None,
         loss=None,
@@ -27,7 +27,7 @@ class VPRModel(L.LightningModule):
         # self.segmentor = segmentor
         self.backbone = backbone
         self.aggregator = aggregator
-        self.pca = pca
+        # self.pca = pca
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.loss_fn = loss
@@ -45,13 +45,18 @@ class VPRModel(L.LightningModule):
             x, theta = self.rotator(x).values()
             out["theta"] = theta
         x = self.backbone(x)
-        return_salad_matrix = kwargs.get("return_salad_matrix", False)
-        agg_out = self.aggregator(x, return_salad_matrix=return_salad_matrix)
+
+        call_args = {}
+        if hasarg(self.aggregator.forward, "return_salad_matrix"):
+            call_args["return_salad_matrix"] = kwargs.get("return_salad_matrix", False)
+        agg_out = self.aggregator(x, **call_args)
+
         if isinstance(agg_out, tuple):
             x, salad_matrix = agg_out
             out["salad_matrix"] = salad_matrix
         else:
             x = agg_out
+
         out["out"] = x
         return out
 

@@ -384,6 +384,7 @@ def benchmark_loop(
                 "min_dists_at_k": benchmark_results["min_dists_at_k"].tolist() if benchmark_results["min_dists_at_k"] is not None else None,
                 "pipeline_time": benchmark_results["pipeline_time"],
                 "db_search_time": benchmark_results["db_search_time"],
+                "rerank_time": benchmark_results["rerank_time"] if matcher is not None else None,
                 "curr_iter_memory_peak": benchmark_results["curr_iter_memory_peak"],
                 "curr_iter_vram_peak": benchmark_results["curr_iter_vram_peak"],
                 "top100_inds": benchmark_results["top100_inds"],
@@ -543,7 +544,10 @@ def benchmark_single(
     all_homographies = None
     passed_distribution_check = None
     if matcher is not None:
-        rerank_res = rerank(matcher, ransac, image, ref_image_dataset, inds, dists, device=device, batch_size=rerank_batch_size, rotations=rerank_rotations)
+        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_fp16):
+            rerank_start_time = time.time()
+            rerank_res = rerank(matcher, ransac, image, ref_image_dataset, inds, dists, device=device, batch_size=rerank_batch_size, rotations=rerank_rotations)
+            rerank_time = time.time() - rerank_start_time
         dists = rerank_res["dists"]
         inds = rerank_res["inds"]
         all_num_inliers = rerank_res["all_num_inliers"]
@@ -734,6 +738,7 @@ def benchmark_single(
     return dict(
         pipeline_time=pipeline_time,
         db_search_time=db_search_time,
+        rerank_time=rerank_time if matcher is not None else None,
         curr_iter_memory_peak=curr_iter_memory_peak,
         curr_iter_vram_peak=curr_iter_vram_peak,
         predicted_coordinates=predicted_coordinate,
