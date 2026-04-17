@@ -34,25 +34,36 @@ def polygon_intersection_metrics(
     return qry_ioa, ref_ioa, area_imbalance, is_tp
 
 
-def calculate_distances(
-    qry, benchmark_top_k, inds, qry_image_dataset, ref_image_dataset, lon_key, lat_key
-):
-    qry_point = qry[lon_key], qry[lat_key]
-    qry_point = crs_transform(qry_point, qry_image_dataset.crs, ref_image_dataset.crs)
-    ref_points = []
-    for cpr_i in range(max(benchmark_top_k)):
-        if cpr_i >= inds.shape[1]:
-            break
-        
-        coords = ref_image_dataset.get_coords_only((inds[0, cpr_i] % len(ref_image_dataset)).item())
-        ref_points.append(coords)
+
+def calculate_distances(qry_point, ref_points, ref_image_dataset):
     gdists = np.array(
         [
             distance_between_points(qry_point, ref_point, ref_image_dataset.crs)
             for ref_point in ref_points
         ]
     )
-    return gdists, ref_points
+    return gdists
+
+
+# def calculate_distances(
+#     qry, benchmark_top_k, inds, qry_image_dataset, ref_image_dataset, lon_key, lat_key
+# ):
+#     qry_point = qry[lon_key], qry[lat_key]
+#     qry_point = crs_transform(qry_point, qry_image_dataset.crs, ref_image_dataset.crs)
+#     ref_points = []
+#     for cpr_i in range(max(benchmark_top_k)):
+#         if cpr_i >= inds.shape[1]:
+#             break
+        
+#         coords = ref_image_dataset.get_coords_only((inds[0, cpr_i] % len(ref_image_dataset)).item())
+#         ref_points.append(coords)
+#     gdists = np.array(
+#         [
+#             distance_between_points(qry_point, ref_point, ref_image_dataset.crs)
+#             for ref_point in ref_points
+#         ]
+#     )
+#     return gdists, ref_points
 
 
 def calculate_intersections(qry, benchmark_top_k, inds, ref_image_dataset):

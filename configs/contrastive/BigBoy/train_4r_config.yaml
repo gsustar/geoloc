@@ -1,0 +1,90 @@
+model:
+  class_path: geoloc.models.contrastive.ContrastiveModel
+  init_args:
+    backbone:
+      class_path: geoloc.models.backbones.RADIOBackbone
+      init_args:
+        model_name: radio_v2.5-b
+        return_cls_token: True
+        out_indices: auto
+        out_channels: 768
+    aggregator:
+      class_path: geoloc.models.aggregators.SALAD
+      init_args:
+        num_channels: 768
+        num_token_channels: 2304
+        num_clusters: 8
+        cluster_dim: 128
+        token_dim: 128
+    optimizer:
+      class_path: torch.optim.AdamW
+      init_args:
+        lr: 1.0e-4
+        weight_decay: 1.0e-5
+    scheduler:
+      class_path: geoloc.schedulers.WarmupCosineAnnealingLR
+      init_args:
+        warmup_epochs: 5
+        max_epochs: &max_epochs 50
+        warmup_start_factor: 0.01
+        eta_min: 1.0e-6
+    loss: 
+      class_path: geoloc.losses.SigLIPLoss
+    faiss_gpu: False
+
+dataset:
+  class_path: geoloc.data.datasets.BigBoy.BigBoyTrainDataset
+  init_args:
+    noaformx: False
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          # - class_path: torchvision.transforms.CenterCrop
+          #   init_args:
+          #     size: 512
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: [512, 512]
+          - class_path: torchvision.transforms.RandomGrayscale
+            init_args:
+              p: 0.2
+          # - class_path: torchvision.transforms.ColorJitter
+          #   init_args:
+          #     brightness: 0.2
+          #     contrast: 0.2
+          #     saturation: 0.2
+          #     hue: 0.1
+          - class_path: geoloc.data.transforms.RandomRotationFromList
+            init_args:
+              angles: [0, 90, 180, 270]
+
+dataloader:
+  batch_size: 64
+  # batch_size: 32
+  num_workers: 2
+  shuffle: True
+  drop_last: True
+  pin_memory: False
+  collate_fn: geoloc.data.datasets.BigBoy.bigboy_collate_fn
+
+trainer:
+  accelerator: 'gpu'
+  devices: 1
+  default_root_dir: './logs/'
+  num_nodes: 1
+  num_sanity_val_steps: 0
+  # precision: '16-mixed'
+  max_epochs: *max_epochs
+  check_val_every_n_epoch: 10
+  reload_dataloaders_every_n_epochs: 1
+  log_every_n_steps: 20
+  gradient_clip_val: 1.0
+  # accumulate_grad_batches: 2
+
+logger: # WandbLogger config
+  offline: False
+  save_dir: /home/grega/geoloc/logs/
+
+build_config: !include build_4r_config.yaml
+benchmark_config: !include benchmark_config.yaml

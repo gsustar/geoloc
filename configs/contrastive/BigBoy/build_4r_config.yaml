@@ -21,7 +21,7 @@ dataset:
         transforms:
           - class_path: torchvision.transforms.Resize
             init_args:
-              size: [448, 448]
+              size: [512, 512]
           # - class_path: geoloc.data.transforms.CircleMaskCrop
     # transforms:
     #   class_path: torchvision.transforms.Compose
@@ -34,6 +34,6 @@ dataset:
 vdb:
   class_path: geoloc.data.vdb.VectorDatabase
   init_args:
-    vdim:  256
+    vdim:  1152
     distfn: cosine
     norm_vec: True

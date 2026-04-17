@@ -104,38 +104,14 @@ def inlier_distribution_check(all_num_inliers, threshold = 0.90, max_keypoints=5
     return passed, combined_metric
 
 
-def apply_homography_to_ref_point(
-    ref_point,
-    homography,
-    query_image_shape,
-    reference_image_shape,
-    meters_per_pixel=0.5,
+def get_ref_points(
+    inds, ref_image_dataset, benchmark_top_k
 ):
-    if homography is None:
-        return ref_point
-
-    H = np.asarray(homography, dtype=np.float64)
-    if H.shape != (3, 3):
-        return ref_point
-
-    if query_image_shape is None:
-        return ref_point
-
-    qry_h, qry_w = int(query_image_shape[0]), int(query_image_shape[1])
-    ref_h, ref_w = int(reference_image_shape[0]), int(reference_image_shape[1])
-
-    query_center = np.asarray([0.5 * (qry_w - 1), 0.5 * (qry_h - 1), 1.0], dtype=np.float64)
-    projected = H @ query_center
-    if np.abs(projected[2]) < 1e-8:
-        return ref_point
-    query_center_in_ref = projected[:2] / projected[2]
-
-    ref_center = np.asarray([0.5 * (ref_w - 1), 0.5 * (ref_h - 1)], dtype=np.float64)
-    delta_px = query_center_in_ref - ref_center
-
-    delta_m_x = delta_px[0] * float(meters_per_pixel)
-    delta_m_y = -delta_px[1] * float(meters_per_pixel)
-
-    ref_point = np.asarray(ref_point, dtype=np.float64).reshape(2)
-    predicted = ref_point + np.asarray([delta_m_x, delta_m_y], dtype=np.float64)
-    return predicted
+    ref_points = []
+    for cpr_i in range(max(benchmark_top_k)):
+        if cpr_i >= inds.shape[1]:
+            break
+        
+        coords = ref_image_dataset.get_coords_only((inds[0, cpr_i] % len(ref_image_dataset)).item())
+        ref_points.append(coords)
+    return ref_points

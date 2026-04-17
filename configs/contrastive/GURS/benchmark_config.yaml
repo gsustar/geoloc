@@ -1,5 +1,6 @@
 VISUALIZE_TOP_K: True
 VISUALIZE_HEATMAP: False
+VISUALIZE_MATCHER: True
 SAVE_SALAD_MATRIX: False
 
 every_n: 50
@@ -29,23 +30,26 @@ dataset:
 
 reranking:
   batch_size: 1
-  # rotations: [0, 90, 180, 270]
   matcher:
-    # class_path: geoloc.models.reranking.LoMaMatcher
-    # init_args:
-    #   resolution: 448
-    #   do_compile: True
-    class_path: geoloc.models.reranking.RomaMatchAnythingMatcher
+    class_path: geoloc.models.reranking.LoMaMatcher
     init_args:
-      weights_path: /storage/datasets/AerialLoc/Drone2Sat/ckpts/matchanything_weights/matchanything_roma.ckpt
-      coarse_res: 448 
-      upsample_preds: False
-      symmetric: False
-      num_sample_keypoints: 5000
+      resolution: 364
+      name: loma_R
+      num_sample_keypoints: 2048
+      filter_threshold: 0.05
       do_compile: False
+
+    # class_path: geoloc.models.reranking.RomaMatchAnythingMatcher
+    # init_args:
+    #   weights_path: /storage/datasets/AerialLoc/Drone2Sat/ckpts/matchanything_weights/matchanything_roma.ckpt
+    #   coarse_res: 448 
+    #   upsample_preds: False
+    #   symmetric: False
+    #   num_sample_keypoints: 5000
+    #   do_compile: False
 
   ransac:
     class_path: geoloc.models.reranking.OpenCVRANSAC
     init_args:
-      reproj_threshold: 1.0
+      reproj_threshold: 5.0
       maxIters: 5000

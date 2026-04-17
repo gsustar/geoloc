@@ -18,16 +18,6 @@ dependencies = [
     "tqdm>=4.67.1",
     "tyro",
 ]
-#dependencies = [
-#    "dataclasses>=0.8",
-#    "einops>=0.8.1",
-#    "opencv-python>=4.12.0.88",
-#    "pillow>=12.0.0",
-#    "torch",
-#    "torchvision>=0.23.0",
-#    "tqdm>=4.67.1",
-#    "tyro",
-#]
 
 [build-system]
 requires = ["uv_build>=0.8.15,<0.9.0"]

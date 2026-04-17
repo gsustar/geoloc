@@ -5,8 +5,7 @@ import torchvision.transforms.functional as TF
 
 # from geoloc.third_party.RoMa.romatch import roma_outdoor
 from romatch import roma_outdoor
-from loma import LoMa, LoMaB
-from loma.loma import to_pixel_coords, filter_matches
+from loma.loma import to_pixel_coords, filter_matches, LoMa, LoMaB, LoMaR
 
 from geoloc.data.utils import collate_with_geometry
 
@@ -28,15 +27,19 @@ class OpenCVRANSAC:
             kptA = kptA.cpu().numpy()
         if isinstance(kptB, torch.Tensor):
             kptB = kptB.cpu().numpy()
-        H, mask = self.ransac(kptA, kptB)
-        if H is not None:
-            H = torch.from_numpy(H).float()
+
+        if kptA.shape[0] >= 4 and kptB.shape[0] >= 4:
+            H, mask = self.ransac(kptA, kptB)
         else:
-            H = torch.eye(3)
+            H = None
+            mask = None
+
+        H = torch.from_numpy(H).float() if H is not None else torch.eye(3)
         if mask is not None:
             mask = torch.from_numpy(mask).bool()
         else:
             mask = torch.zeros(kptA.shape[0], dtype=torch.bool)
+
         return H, mask
 
 
@@ -123,22 +126,30 @@ class RomaMatchAnythingMatcher(torch.nn.Module):
 
 
 class LoMaMatcher(torch.nn.Module):
-    def __init__(self, resolution=448, do_compile=False):
+    def __init__(self, name="loma_R", resolution=448, do_compile=False, filter_threshold=0.1, num_sample_keypoints=2048):
         super().__init__()
-        self.matcher = LoMa(LoMaB(compile=do_compile))
+        if name == "loma_R":
+            cfg = LoMaR(compile=do_compile)
+        else:
+            cfg = LoMaB(compile=do_compile)
+        self.matcher = LoMa(cfg)
+
         self.coarse_res = resolution # NOTE: strictly for compatibility with RomaMatcher, LoMa doesn't actually have a coarse stage
         self.do_compile = do_compile
-        self.num_sample_keypoints = self.matcher.cfg.num_keypoints
+        self.num_sample_keypoints = num_sample_keypoints
+        self.filter_threshold = filter_threshold
 
     def forward(self, qry_batch, ref_batch):
+        qB, qC, qH, qW = qry_batch.shape
+        rB, rC, rH, rW = ref_batch.shape        
         qry_batch = TF.resize(qry_batch, size=(self.coarse_res, self.coarse_res))
         ref_batch = TF.resize(ref_batch, size=(self.coarse_res, self.coarse_res))
         with torch.no_grad():
-            keypoints_A, descriptors_A, h1, w1 = self.matcher.detect_and_describe(qry_batch, self.matcher.cfg.num_keypoints)
-            keypoints_B, descriptors_B, h2, w2 = self.matcher.detect_and_describe(ref_batch, self.matcher.cfg.num_keypoints)
+            keypoints_A, descriptors_A, h1, w1 = self.matcher.detect_and_describe(qry_batch, self.num_sample_keypoints)
+            keypoints_B, descriptors_B, h2, w2 = self.matcher.detect_and_describe(ref_batch, self.num_sample_keypoints)
 
             scores = self.matcher(keypoints_A, keypoints_B, descriptors_A, descriptors_B)["scores"]
-            m0, _, _, _ = filter_matches(scores, self.matcher.cfg.filter_threshold)
+            m0, _, _, _ = filter_matches(scores, self.filter_threshold)
 
             all_kptsA = []
             all_kptsB = []
@@ -149,8 +160,10 @@ class LoMaMatcher(torch.nn.Module):
                 matched_A = keypoints_A[i][torch.where(valid)[0]]
                 matched_B = keypoints_B[i][m0[i][valid]]
 
-                matched_A = to_pixel_coords(matched_A, h1, w1)
-                matched_B = to_pixel_coords(matched_B, h2, w2)
+                # matched_A = to_pixel_coords(matched_A, h1, w1)
+                # matched_B = to_pixel_coords(matched_B, h2, w2)
+                matched_A = to_pixel_coords(matched_A, qH, qW)
+                matched_B = to_pixel_coords(matched_B, rH, rW)
 
                 matched_A = torch.nn.functional.pad(matched_A, (0, 0, 0, self.matcher.cfg.num_keypoints - matched_A.shape[0]), value=-1.0)
                 matched_B = torch.nn.functional.pad(matched_B, (0, 0, 0, self.matcher.cfg.num_keypoints - matched_B.shape[0]), value=-1.0)
@@ -170,8 +183,14 @@ def estimate_homography(kptsA, kptsB, ransac):
     Hs = []
     masks = []
     for kA, kB in zip(kptsA, kptsB):
+        # Remove invalid keypoints
+        valid_mask = (kA[:, 0] >= 0) & (kA[:, 1] >= 0) & (kB[:, 0] >= 0) & (kB[:, 1] >= 0)
+        kA = kA[valid_mask]
+        kB = kB[valid_mask]
         H, mask = ransac(kA.float(), kB.float())
         Hs.append(H.squeeze(0))
+        # add padding to mask to make it the same length as the original keypoints
+        mask = torch.nn.functional.pad(mask, (0, 0, 0, kptsA.shape[1] - mask.shape[0]), value=False)
         masks.append(mask.squeeze(0))
     num_inliers = torch.stack([m.sum() for m in masks])
     if len(Hs) > 0:
@@ -182,7 +201,7 @@ def estimate_homography(kptsA, kptsB, ransac):
 
 
 def rerank(
-    matcher, ransac, qry_image, ref_image_dataset, inds, dists=None, device=None, batch_size=1, rotations=None
+    matcher, ransac, qry_image, ref_image_dataset, inds, dists=None, device=None, batch_size=1
 ):
     assert matcher is not None, "Matcher model must be provided"
 
@@ -194,9 +213,6 @@ def rerank(
 
     if qry_image.ndim == 3:
         qry_image = qry_image.unsqueeze(0)
-
-    if rotations is None or len(rotations) == 0:
-        rotations = [0]
 
     mapped_inds = [int(idx % len(ref_image_dataset)) for idx in inds[0]]
     subset = torch.utils.data.Subset(ref_image_dataset, mapped_inds)
@@ -210,36 +226,15 @@ def rerank(
     all_masks = []
     for batch in dataloader:
         ref_batch = batch["image"].to(device)
-        qry_batch_base = qry_image.expand(ref_batch.shape[0], -1, -1, -1)
+        qry_batch = qry_image.expand(ref_batch.shape[0], -1, -1, -1)
 
-        best_num_inliers = None
-        best_homographies = None
-        num_matches = None
+        kptsA, kptsB = matcher(qry_batch, ref_batch)
+        Hs, masks, num_inliers = estimate_homography(kptsA, kptsB, ransac)
+        num_outliers = kptsA.shape[1] - num_inliers
 
-        for angle in rotations:
-            qry_batch = TF.rotate(qry_batch_base, angle) if angle != 0 else qry_batch_base
-            kptsA, kptsB = matcher(qry_batch, ref_batch)
-            Hs, masks, num_inliers = estimate_homography(kptsA, kptsB, ransac)
-
-            if masks.ndim >= 2:
-                num_matches = masks.shape[1]
-
-            if best_num_inliers is None:
-                best_num_inliers = num_inliers
-                best_homographies = Hs
-            else:
-                better = num_inliers > best_num_inliers
-                best_num_inliers = torch.where(better, num_inliers, best_num_inliers)
-                better_h = better.view(-1, 1, 1)
-                best_homographies = torch.where(better_h, Hs, best_homographies)
-
-        if num_matches is None:
-            num_matches = 0
-
-        best_num_outliers = num_matches - best_num_inliers
-        all_num_inliers.append(best_num_inliers)
-        all_homographies.append(best_homographies)
-        all_num_outliers.append(best_num_outliers)
+        all_num_inliers.append(num_inliers)
+        all_homographies.append(Hs)
+        all_num_outliers.append(num_outliers)
         all_kptsA.append(kptsA)
         all_kptsB.append(kptsB)
         all_masks.append(masks)

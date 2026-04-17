@@ -15,6 +15,7 @@ class ContrastiveModel(VPRModel):
     def train_forward(self, x):
         BS, N, ch, h, w = x.shape
         embeddings = []
+        # NOTE: For loop to avoid out of memory, since the backbone may be too large to process all images at once
         for i in range(BS):
             embed = self.backbone(x[i])
             embed = self.aggregator(embed)
@@ -84,7 +85,6 @@ class STContrastiveModel(ContrastiveModel):
 
         feats = torch.stack([sat_alpha0_feat_unrot, sat_alpha1_feat_unrot, drn_alpha0_feat_unrot, drn_alpha1_feat_unrot], dim=1)
         embs = torch.stack([sat_alpha0_emb, sat_alpha1_emb, drn_alpha0_emb, drn_alpha1_emb], dim=1)
-        loss = self.loss_function(embs, feats, labels)
 
         if torch.isnan(embs).any():
             raise ValueError("NaNs in descriptors")
@@ -100,7 +100,6 @@ class STContrastiveModel(ContrastiveModel):
         embs = output['out']
         feats = output['features']
         
-        loss = self.loss_function(embs, feats, labels)
         if torch.isnan(embs).any():
             raise ValueError("NaNs in descriptors")
 
@@ -122,88 +121,3 @@ class STContrastiveModel(ContrastiveModel):
         self.log("ft_loss", ft_loss.item(), logger=True, prog_bar=True)
         self.log("loss", loss.item(), logger=True, prog_bar=True)
         return loss
-
-
-class ContrastiveModelWithPCA(ContrastiveModel):
-    def __init__(self, pca, *args, fit_step=10, max_pca_embeddings=5000, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.pca = pca
-        assert self.pca is not None
-        self.fit_step = fit_step
-        self.max_pca_embeddings = max_pca_embeddings
-        self._pca_buffer = []
-        self._pca_buffer_count = 0
-
-    def _is_pca_fitted(self):
-        return hasattr(self.pca, "components_")
-
-    @torch.no_grad()
-    def _append_for_pca(self, embeddings, batch_idx):
-        if batch_idx % self.fit_step != 0:
-            return
-        if self._pca_buffer_count >= self.max_pca_embeddings:
-            return
-
-        emb = embeddings.detach().reshape(-1, embeddings.shape[-1]).cpu().float()
-
-        remaining = self.max_pca_embeddings - self._pca_buffer_count
-        if remaining <= 0:
-            return
-        emb = emb[:remaining]
-
-        self._pca_buffer.append(emb)
-        self._pca_buffer_count += emb.shape[0]
-
-    @torch.no_grad()
-    def _fit_pca_if_needed(self):
-        feats = torch.cat(self._pca_buffer, dim=0)
-        # if feats.shape[0] > self.max_pca_embeddings:
-        #     keep = torch.randperm(feats.shape[0])[: self.max_pca_embeddings]
-        #     feats = feats[keep]
-
-        self.pca.fit(feats.numpy())
-        self._pca_buffer = []
-        self._pca_buffer_count = 0
-
-    @torch.no_grad()
-    def _apply_pca_if_fitted(self, descriptors):
-        if not self._is_pca_fitted():
-            return descriptors
-        shape = descriptors.shape
-        x = descriptors.detach().reshape(-1, shape[-1]).cpu().float().numpy()
-        x = self.pca.transform(x)
-        x = torch.from_numpy(x).to(descriptors.device, dtype=descriptors.dtype)
-        return x.reshape(*shape[:-1], -1)
-
-    def forward(self, x, **kwargs):
-        out = super().forward(x, **kwargs)
-        if not self.training:
-            out["out"] = self._apply_pca_if_fitted(out["out"])
-        return out
-
-    def training_step(self, batch, batch_idx):
-        imgs, labels = self._unpack_training_batch(batch)
-        descriptors = self.train_forward(imgs)["out"]
-        self._append_for_pca(descriptors, batch_idx)
-
-        if torch.isnan(descriptors).any():
-            raise ValueError("NaNs in descriptors")
-
-        loss = self.loss_function(descriptors, labels)
-        self.log("loss", loss.item(), logger=True, prog_bar=True)
-        self.extra_logs()
-        return {"loss": loss}
-
-    def on_train_end(self):
-        self._fit_pca_if_needed()
-        return super().on_train_end()
-
-    def on_save_checkpoint(self, checkpoint):
-        self._fit_pca_if_needed()
-        super().on_save_checkpoint(checkpoint)
-        checkpoint["pca"] = self.pca
-
-    def on_load_checkpoint(self, checkpoint):
-        super().on_load_checkpoint(checkpoint)
-        if "pca" in checkpoint:
-            self.pca = checkpoint["pca"]

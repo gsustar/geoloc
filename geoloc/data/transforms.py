@@ -21,3 +21,12 @@ class CircleMaskCrop:
         dist = torch.sqrt((X - center_x)**2 + (Y - center_y)**2)
         mask = (dist <= radius).float()[None, :, :]   # shape (1, H, W)
         return img * mask
+    
+
+class RandomRotationFromList:
+    def __init__(self, angles):
+        self.angles = angles
+
+    def __call__(self, img):
+        angle = self.angles[torch.randint(0, len(self.angles), (1,)).item()]
+        return TF.rotate(img, angle)

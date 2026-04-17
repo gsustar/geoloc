@@ -17,12 +17,15 @@ from geoloc.visualize import (
     visualize_vlad_clusters,
     visualize_similarity_heatmap_visloc,
     visualize_similarity_heatmap_gurs,
+    visualize_matches2,
+    visualize_warp,
 )
 from geoloc.data.vdb import load_database
 from geoloc.config_parser import load_config, save_config, class_from_config
-from geoloc.utils import DEBUG, load_model, get_model_type, get_dataset_type, requires_arg
+from geoloc.utils import DEBUG, crs_transform, load_model, get_model_type, get_dataset_type, requires_arg
 from geoloc.eval.metrics import calculate_distances, calculate_intersections, hit_at_k, tp_at_k, safe_rank1, rank1_or_sentinel, reciprocal_rank_from_rank1, average_precision
-from geoloc.eval.utils import write_resdict_to_file, write_pretty_table, segvlad_get_matches, inlier_distribution_check, apply_homography_to_ref_point
+from geoloc.eval.utils import write_resdict_to_file, write_pretty_table, segvlad_get_matches, inlier_distribution_check, get_ref_points
+from geoloc.eval.homography import predict_qry_camera_position
 from geoloc.data.utils import collate_with_geometry
 from geoloc.models.reranking import rerank
 
@@ -121,6 +124,7 @@ def benchmark_main(vdbdir: str, traj_config, use_fp16=True, profile=False):
     visualize_vlad = getattr(traj_config, "VISUALIZE_VLAD", False) and supports_vlad_visualization(model_type)
     visualize_top_k = getattr(traj_config, "VISUALIZE_TOP_K", False)
     visualize_heatmap = getattr(traj_config, "VISUALIZE_HEATMAP", False)
+    visualize_matcher = getattr(traj_config, "VISUALIZE_MATCHER", False)
     save_salad_matrix = getattr(traj_config, "SAVE_SALAD_MATRIX", False)
     rotexp_thetas = [0, 90, 180, 270] if getattr(build_config, "ROTREF_EXP", False) else [0]
     rottraj_thetas = [0, 90, 180, 270] if getattr(traj_config, "ROTTRAJ_EXP", False) else [0]
@@ -139,12 +143,10 @@ def benchmark_main(vdbdir: str, traj_config, use_fp16=True, profile=False):
 
     matcher = None
     ransac = None
-    rerank_rotations = None
     rerank_batch_size = 1
     if hasattr(traj_config, "reranking"):
         matcher = class_from_config(traj_config.reranking.matcher)
         ransac = class_from_config(traj_config.reranking.ransac)
-        rerank_rotations = getattr(traj_config.reranking, "rotations", None)
         rerank_batch_size = getattr(traj_config.reranking, "batch_size", 1)
     
     use_radius_policy = (
@@ -174,9 +176,9 @@ def benchmark_main(vdbdir: str, traj_config, use_fp16=True, profile=False):
         ref_image_dataset=ref_image_dataset, vdbdir=vdbdir, dataset_type=dataset_type, is_distance_based=is_distance_based,
         lon_key=lon_key, lat_key=lat_key, benchmark_recall_at_xmeters=benchmark_recall_at_xmeters,
         benchmark_top_k=benchmark_top_k, rotexp_thetas=rotexp_thetas, rottraj_thetas=rottraj_thetas,
-        visualize_vlad=visualize_vlad, visualize_top_k=visualize_top_k, visualize_heatmap=visualize_heatmap,
+        visualize_vlad=visualize_vlad, visualize_top_k=visualize_top_k, visualize_heatmap=visualize_heatmap, visualize_matcher=visualize_matcher,
         every_n=every_n, savedir=savedir, device=device, save_salad_matrix=save_salad_matrix, use_fp16=use_fp16,
-        matcher=matcher, ransac=ransac, rerank_batch_size=rerank_batch_size, rerank_rotations=rerank_rotations,
+        matcher=matcher, ransac=ransac, rerank_batch_size=rerank_batch_size,
         use_radius_policy=use_radius_policy, radius_search_meters=radius_search_meters, confidence_pass_streak_threshold=confidence_pass_streak_threshold,
     )
 
@@ -283,9 +285,9 @@ def benchmark_loop(
     dataset_type,  vdbdir, is_distance_based=None, lon_key=None, lat_key=None, 
     benchmark_recall_at_xmeters=[100, 250, 500, 1000], 
     benchmark_top_k=[1, 5, 10, 25, 50, 100], rotexp_thetas=[0], rottraj_thetas=[0], 
-    visualize_vlad=False, visualize_top_k=False, visualize_heatmap=False, every_n=1, 
+    visualize_vlad=False, visualize_top_k=False, visualize_matcher=False, visualize_heatmap=False, every_n=1, 
     savedir=None, device="cpu", save_salad_matrix=False, use_fp16=True, matcher=None,
-    ransac=None, rerank_batch_size=1, rerank_rotations=None,
+    ransac=None, rerank_batch_size=1,
     use_radius_policy=False, radius_search_meters=5000.0, confidence_pass_streak_threshold=2,
 ):
     
@@ -345,9 +347,9 @@ def benchmark_loop(
                 ref_image_dataset=ref_image_dataset, vdbdir=vdbdir, dataset_type=dataset_type, query_ix=i,
                 is_distance_based=is_distance_based, lon_key=lon_key, lat_key=lat_key, theta=theta, theta_ix=j,
                 benchmark_recall_at_xmeters=benchmark_recall_at_xmeters, benchmark_top_k=benchmark_top_k,
-                rotexp_thetas=rotexp_thetas, visualize_vlad=visualize_vlad, visualize_top_k=visualize_top_k,
+                rotexp_thetas=rotexp_thetas, visualize_vlad=visualize_vlad, visualize_matcher=visualize_matcher, visualize_top_k=visualize_top_k,
                 visualize_heatmap=visualize_heatmap, savedir=savedir, device=device, save_salad_matrix=save_salad_matrix,
-                use_fp16=use_fp16, matcher=matcher, ransac=ransac, rerank_batch_size=rerank_batch_size, rerank_rotations=rerank_rotations,
+                use_fp16=use_fp16, matcher=matcher, ransac=ransac, rerank_batch_size=rerank_batch_size,
                 use_radius_search=use_radius_now, radius_center=prev_predicted_coordinates, radius_meters=radius_search_meters,
             )
 
@@ -459,9 +461,9 @@ def benchmark_single(
     model, model_type, vdb, qry_image_dataset, 
     ref_image_dataset, vdbdir, dataset_type, query_ix,
     is_distance_based=None, lon_key=None, lat_key=None, theta=0, theta_ix=0, benchmark_recall_at_xmeters=[100, 250, 500, 1000],
-    benchmark_top_k=[1, 5, 10, 25, 50, 100], rotexp_thetas=[0], visualize_vlad=False, 
+    benchmark_top_k=[1, 5, 10, 25, 50, 100], rotexp_thetas=[0], visualize_vlad=False, visualize_matcher=False,
     visualize_top_k=False, visualize_heatmap=False, savedir=None, device=None, save_salad_matrix=False, use_fp16=True, qry=None,
-    matcher=None, ransac=None, rerank_batch_size=1, rerank_rotations=None,
+    matcher=None, ransac=None, rerank_batch_size=1,
     use_radius_search=False, radius_center=None, radius_meters=5000.0,
 ):
     if is_distance_based is None:
@@ -519,15 +521,6 @@ def benchmark_single(
             query_x=center_x,
             radius_m=float(radius_meters),
         )
-        # required_k = max(search_top_k)
-        # has_enough_results = (
-        #     inds.ndim == 2
-        #     and inds.shape[0] > 0
-        #     and inds.shape[1] >= required_k
-        #     and np.all(inds[0, :required_k] >= 0)
-        # )
-        # if not has_enough_results:
-        #     dists, inds = vdb.search(qu=x, k=max(search_top_k), **search_args)
     else:
         dists, inds = vdb.search(qu=x, k=max(search_top_k), **search_args)
     db_search_time = time.time() - db_search_start_time
@@ -546,7 +539,7 @@ def benchmark_single(
     if matcher is not None:
         with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_fp16):
             rerank_start_time = time.time()
-            rerank_res = rerank(matcher, ransac, image, ref_image_dataset, inds, dists, device=device, batch_size=rerank_batch_size, rotations=rerank_rotations)
+            rerank_res = rerank(matcher, ransac, image, ref_image_dataset, inds, dists, device=device, batch_size=rerank_batch_size)
             rerank_time = time.time() - rerank_start_time
         dists = rerank_res["dists"]
         inds = rerank_res["inds"]
@@ -564,29 +557,48 @@ def benchmark_single(
     min_dists_at_k = None
 
     if is_distance_based:
-        gdists, ref_points = calculate_distances(
-            qry, benchmark_top_k, inds, qry_image_dataset, ref_image_dataset, lon_key, lat_key
-        )
-
-        top_ref_point = ref_points[0]
-        if all_homographies is not None and len(all_homographies) > 0 and dataset_type in ["vicos", "ges"]:
-            try:
-                tile_size = ref_image_dataset.tile_size
-            except AttributeError:
-                tile_size = ref_image_dataset.get_tile_size_for_index(inds[0, 0] % len(ref_image_dataset)) # MultiTileSizeDataset
-            top_ref_point = apply_homography_to_ref_point(
-                top_ref_point,
-                all_homographies[0],
-                query_image_shape=(1080, 1080), #!!! hardcoded for now. problem is resizing in dataset that breaks the pix_res assumption.
-                reference_image_shape=(tile_size, tile_size),
-                meters_per_pixel=ref_image_dataset.pxl_res,
-            )
+        ref_points = get_ref_points(inds, ref_image_dataset, benchmark_top_k)
+        # gdists, ref_points = calculate_distances(
+        #     qry, benchmark_top_k, inds, qry_image_dataset, ref_image_dataset, lon_key, lat_key
+        # )
+        # top_ref_point = ref_points[0]
+        if (all_homographies is not None 
+            and len(all_homographies) > 0
+            and dataset_type in ["vicos", "ges"]
+        ):
+            sample_ref_image = ref_image_dataset[0]["image"]
+            ref_h, ref_w = int(sample_ref_image.shape[1]), int(sample_ref_image.shape[2])
+            qry_h, qry_w = int(image.shape[1]), int(image.shape[2])
+            for rpi, curr_ref_point in enumerate(ref_points[:5]):
+                try:
+                    tile_size = ref_image_dataset.tile_size
+                except AttributeError:
+                    tile_size = ref_image_dataset.get_tile_size_for_index(inds[0, 0] % len(ref_image_dataset)) # Necessary for MultiTileSizeDataset
+                # top_ref_point = apply_homography_to_ref_point(
+                #     top_ref_point,
+                #     all_homographies[0],
+                #     query_image_shape=(1080, 1080), #!!! hardcoded for now. problem is resizing in dataset that breaks the pix_res assumption.
+                #     reference_image_shape=(tile_size, tile_size),
+                #     meters_per_pixel=ref_image_dataset.pxl_res,
+                # )
+                ref_points[rpi] = predict_qry_camera_position(
+                    ref_center_point=curr_ref_point,
+                    ref_original_shape=(tile_size, tile_size),
+                    qry_matcher_shape=(qry_h, qry_w),
+                    ref_matcher_shape=(ref_h, ref_w),
+                    H=all_homographies[0],
+                )
 
         predicted_coordinate = {
-            lon_key: top_ref_point[0],
-            lat_key: top_ref_point[1],
+            lon_key: ref_points[0][0],
+            lat_key: ref_points[0][1],
         }
-        
+
+
+        qry_point = qry[lon_key], qry[lat_key]
+        qry_point = crs_transform(qry_point, qry_image_dataset.crs, ref_image_dataset.crs)
+        gdists = calculate_distances(qry_point, ref_points, ref_image_dataset)
+
         # Calculate top-k distances
         min_dists_at_k = np.zeros(len(benchmark_top_k))
         for h, k in enumerate(benchmark_top_k):
@@ -598,7 +610,7 @@ def benchmark_single(
         # )
         # tp_flags = np.array(intersection_tps, dtype=bool)
 
-        gt_pos = ref_image_dataset._get_gt_windows(qry["geometry"][0], overlap_threshold=0.25) # !!! it can happen that no image in reference database has an overlap of X% with query. Either overlapping reference database or low threshold
+        gt_pos = ref_image_dataset._get_gt_windows(qry["geometry"][0], overlap_threshold=0.25) # !!! it can happen that no image in reference database has an overlap of X% with query. Either overlap reference database or set lower threshold
         gt_pos = list(gt_pos.index)
         retrieved = (inds[0, :] % len(ref_image_dataset)).astype(int)
         gt_set = set(gt_pos if isinstance(gt_pos, (list, tuple, np.ndarray)) else [gt_pos])
@@ -728,6 +740,28 @@ def benchmark_single(
                 savedir=savedir,
                 rotref_exp=True if rotexp_thetas != [0] else False,
             )
+
+    if visualize_matcher:
+        assert matcher is not None, "Matcher is required for warping visualizations."
+        imA = image.cpu()
+        imB = ref_image_dataset[inds[0, 0] % len(ref_image_dataset)]["image"].cpu()
+        visualize_matches2(
+            imgA_tensor=imA,
+            imgB_tensor=imB,
+            kptsA=torch.as_tensor(rerank_res["qry_kpts"][0]),
+            kptsB=torch.as_tensor(rerank_res["ref_kpts"][0]),
+            mask=torch.as_tensor(rerank_res["inliers"][0]),
+            always_draw=True,
+            save_path=os.path.join(savedir, f"matches_q{query_ix:05d}.png")
+        )
+        visualize_warp(
+            im_A=imA,
+            im_B=imB,
+            H=torch.as_tensor(rerank_res["all_homographies"][0]),
+            save_path=os.path.join(savedir, f"warp_q{query_ix:05d}.png")
+        )
+
+
     if save_salad_matrix and salad_matrix is not None:
         salad_savedir = os.path.join(savedir, "qry_salad_matrices")
         salad_filename = filename.replace(".png", ".npy")

@@ -5,16 +5,18 @@ import tyro
 from PIL import Image, ImageDraw
 
 from loma import LoMa
-from loma.loma import LoMaB, LoMaConfig, filter_matches, to_pixel_coords
-
+from loma.loma import (
+    LoMaB,
+    filter_matches,
+    to_pixel_coords    
+)
+from loma.cfg import LoMaConfig
 
 def main(
     matcher: LoMaConfig = LoMaB(),
-    # im_A: str = "assets/toronto_A.jpg",
-    im_A: str = "assets/qry_new.png",
-    # im_B: str = "assets/toronto_B.jpg",
-    im_B: str = "assets/ref_new_rotated.png",
-    save_path: str = "demo/matches2.jpg",
+    im_A: str = "assets/toronto_A.jpg",
+    im_B: str = "assets/toronto_B.jpg",
+    save_path: str = "demo/matches.jpg",
 ):
     model = LoMa(matcher)
 

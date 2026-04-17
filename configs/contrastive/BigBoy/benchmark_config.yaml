@@ -1,5 +1,5 @@
-VISUALIZE_TOP_K: True
-SAVE_SALAD_MATRIX: True
+VISUALIZE_TOP_K: False
+SAVE_SALAD_MATRIX: False
 
 every_n: 1
 benchmark_top_k: [1, 5, 10, 25, 50, 100]
