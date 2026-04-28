@@ -89,7 +89,7 @@ class RomaMatchAnythingMatcher(torch.nn.Module):
             new_roma_state_dict[new_key] = value
         self.matcher.load_state_dict(new_roma_state_dict, strict=False)
 
-    def forward(self, qry_batch, ref_batch):
+    def forward(self, qry_batch, ref_batch, **kwargs):
         qB, qC, qH, qW = qry_batch.shape
         rB, rC, rH, rW = ref_batch.shape
         all_kptsA = []
@@ -126,7 +126,7 @@ class RomaMatchAnythingMatcher(torch.nn.Module):
 
 
 class LoMaMatcher(torch.nn.Module):
-    def __init__(self, name="loma_R", resolution=448, do_compile=False, filter_threshold=0.1, num_sample_keypoints=2048, repeated_qry_optimization=False):
+    def __init__(self, name="loma_R", resolution=448, do_compile=False, filter_threshold=0.1, num_sample_keypoints=2048):
         super().__init__()
         if name == "loma_R":
             cfg = LoMaR(compile=do_compile)
@@ -138,16 +138,15 @@ class LoMaMatcher(torch.nn.Module):
         self.do_compile = do_compile
         self.num_sample_keypoints = num_sample_keypoints
         self.filter_threshold = filter_threshold
-        self.repeated_qry_optimization = repeated_qry_optimization
 
-    def forward(self, qry_batch, ref_batch):
+    def forward(self, qry_batch, ref_batch, repeated_qry_optimization=False, **kwargs):
         qB, qC, qH, qW = qry_batch.shape
         rB, rC, rH, rW = ref_batch.shape        
         qry_batch = TF.resize(qry_batch, size=(self.coarse_res, self.coarse_res))
         ref_batch = TF.resize(ref_batch, size=(self.coarse_res, self.coarse_res))
 
         # Hacky way to only run on one query image
-        if self.repeated_qry_optimization:
+        if repeated_qry_optimization:
             keypoints_A, descriptors_A, h1, w1 = self.matcher.detect_and_describe(qry_batch[0:1], self.num_sample_keypoints)
             keypoints_A = keypoints_A.expand(qB, -1, -1)
             descriptors_A = descriptors_A.expand(qB, -1, -1)
@@ -237,7 +236,7 @@ def rerank(
         ref_batch = batch["image"].to(device)
         qry_batch = qry_image.expand(ref_batch.shape[0], -1, -1, -1)
 
-        kptsA, kptsB = matcher(qry_batch, ref_batch)
+        kptsA, kptsB = matcher(qry_batch, ref_batch, repeated_qry_optimization=True)
         Hs, masks, num_inliers = estimate_homography(kptsA, kptsB, ransac)
         num_outliers = kptsA.shape[1] - num_inliers
 
