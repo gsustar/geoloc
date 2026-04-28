@@ -126,7 +126,7 @@ class RomaMatchAnythingMatcher(torch.nn.Module):
 
 
 class LoMaMatcher(torch.nn.Module):
-    def __init__(self, name="loma_R", resolution=448, do_compile=False, filter_threshold=0.1, num_sample_keypoints=2048, repeated_qry_optimization=True):
+    def __init__(self, name="loma_R", resolution=448, do_compile=False, filter_threshold=0.1, num_sample_keypoints=2048, repeated_qry_optimization=False):
         super().__init__()
         if name == "loma_R":
             cfg = LoMaR(compile=do_compile)
