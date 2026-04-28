@@ -15,7 +15,7 @@ dependencies = [
     "loguru",
     "matplotlib",
     "opencv-python",
-    "poselib>=2.0.4",
+    #"poselib>=2.0.4",
     "timm",
     "torch>=2.5.1",
     "torchvision",

@@ -38,7 +38,7 @@ class OpenCVRANSAC:
         if mask is not None:
             mask = torch.from_numpy(mask).bool()
         else:
-            mask = torch.zeros(kptA.shape[0], dtype=torch.bool)
+            mask = torch.zeros((kptA.shape[0], 1), dtype=torch.bool)
 
         return H, mask
 
@@ -216,7 +216,7 @@ def rerank(
 
     mapped_inds = [int(idx % len(ref_image_dataset)) for idx in inds[0]]
     subset = torch.utils.data.Subset(ref_image_dataset, mapped_inds)
-    dataloader = torch.utils.data.DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=4, collate_fn=collate_with_geometry)
+    dataloader = torch.utils.data.DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=0, collate_fn=collate_with_geometry)
 
     all_num_inliers = []
     all_homographies = []

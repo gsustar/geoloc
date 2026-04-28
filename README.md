@@ -19,7 +19,13 @@ pip install -r requirements_orin.txt
 conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
 ```
 ```bash
-# If you want to install as pip package
+cd geoloc/third_party/LoMa/
+pip install -e .
+
+cd geoloc/third_party/RoMa/
+pip install -e .
+
+cd geoloc
 pip install -e .
 ```
 

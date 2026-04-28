@@ -7,7 +7,6 @@ import torch.nn.functional as F
 
 from copy import deepcopy
 from ..utils import freeze, unfreeze_layers, dino_processor, radio_processor, remove_registers_and_cls_token
-from .ultravpr import E2ResNet
 
 
 class MultiScaleOutputMixin:
@@ -508,6 +507,7 @@ class CTONN_VGGBackbone(nn.Module):
 class UltraVPRBackbone(nn.Module):
     def __init__(self, ckpt_path, freeze_backbone=True):
         super().__init__()
+        from .ultravpr import E2ResNet
         self.backbone = E2ResNet(depth=50, out_indices=(3, ), with_geotensor=True, orientation=8, middle_channels=2048)
         checkpoint = torch.load(ckpt_path, map_location="cpu")
         vpr_model_state_dict = checkpoint['state_dict']
