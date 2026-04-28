@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from copy import deepcopy
-from ..utils import freeze, unfreeze_layers, dino_processor, radio_processor, remove_registers_and_cls_token
+from ..utils import freeze, unfreeze_layers, dino_processor, radio_processor, remove_registers_and_cls_token, eupe_processor
 
 
 class MultiScaleOutputMixin:
@@ -518,3 +518,57 @@ class UltraVPRBackbone(nn.Module):
 
     def forward(self, x):
         return self.backbone(x)
+
+
+class EUPEBackbone(nn.Module, MultiScaleOutputMixin):
+    def __init__(self,
+            repo_dir="/home/grega/EUPE",
+            weights_path="/storage/datasets/AerialLoc/Drone2Sat/ckpts/eupe/EUPE-ViT-B.pt",
+            return_cls_token=False,
+            out_indices=None,
+            out_channels=None,
+        ):
+        super().__init__()
+        self.model_name = weights_path.split("/")[-1].split(".")[0]
+        self.backbone = torch.hub.load(repo_dir, 'eupe_vitb16', source='local', weights=weights_path)
+        self.backbone = freeze(self.backbone)
+        self.backbone.eval()
+        self.return_cls_token = return_cls_token
+
+        self.setup_multiscale_output(
+            backbone_hidden_size=self.backbone.embed_dim,
+            backbone_num_hidden_layers=self.backbone.n_blocks,
+            out_indices=out_indices,
+            out_channels=out_channels,
+        )
+
+    def forward(self, x):
+        x, latent_size = eupe_processor(x, return_latent_size=True)
+
+        if self.output_hidden_states:
+            outputs = self.backbone.get_intermediate_layers(x, n=self.out_indices, return_class_token=self.return_cls_token)
+            x = torch.cat([out[0] for out in outputs], dim=-1)
+            cls_token = None
+            if self.return_cls_token:
+                cls_token = torch.cat([out[1] for out in outputs], dim=-1)
+        else:
+            outputs = self.backbone.forward_features(x)
+            cls_token, x = outputs["x_norm_clstoken"], outputs["x_norm_patchtokens"]
+
+        if self.return_cls_token:
+            x = torch.cat([cls_token.unsqueeze(1), x], dim=1)
+
+        x = self.out(x)
+
+        if self.return_cls_token:
+            cls_token, x = x[:, 0], x[:, 1:]
+
+        x = einops.rearrange(
+            x, "b (h w) c -> b c h w", h=latent_size[0], w=latent_size[1]
+        )
+        if self.return_cls_token:
+            return x, cls_token
+        return x
+
+
+        

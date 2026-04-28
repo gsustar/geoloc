@@ -52,6 +52,20 @@ def torch_trace_friendly_dino_processor(x: torch.Tensor, patch_size: int):
     x = x[:, :, top:top + new_h, left:left + new_w]
     return x
 
+def eupe_processor(x: torch.Tensor, do_resize: bool = False, return_latent_size: bool = False):
+    c, h, w = x.shape[-3:]
+    patch_size = 16
+    new_h, new_w = (h // patch_size) * patch_size, (w // patch_size) * patch_size
+    x = TF.normalize(x, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+    if do_resize:
+        x = TF.resize(x, (new_h, new_w), antialias=True)
+    else:
+        x = TF.center_crop(x, (new_h, new_w))
+    if return_latent_size:
+        latent_size = (new_h // patch_size, new_w // patch_size)
+        return x, latent_size
+    return x
+
 
 def remove_registers_and_cls_token(backbone_features: torch.Tensor, latent_size: tuple, return_cls_tokens: bool = False):
     num_feat_tkns = latent_size[0] * latent_size[1]
