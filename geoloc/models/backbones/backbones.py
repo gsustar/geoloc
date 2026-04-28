@@ -525,6 +525,7 @@ class EUPEBackbone(nn.Module, MultiScaleOutputMixin):
             repo_dir="/home/grega/EUPE",
             weights_path="/storage/datasets/AerialLoc/Drone2Sat/ckpts/eupe/EUPE-ViT-B.pt",
             return_cls_token=False,
+            project_cls_token=False,
             out_indices=None,
             out_channels=None,
         ):
@@ -534,6 +535,7 @@ class EUPEBackbone(nn.Module, MultiScaleOutputMixin):
         self.backbone = freeze(self.backbone)
         self.backbone.eval()
         self.return_cls_token = return_cls_token
+        self.project_cls_token = project_cls_token
 
         self.setup_multiscale_output(
             backbone_hidden_size=self.backbone.embed_dim,
@@ -555,12 +557,12 @@ class EUPEBackbone(nn.Module, MultiScaleOutputMixin):
             outputs = self.backbone.forward_features(x)
             cls_token, x = outputs["x_norm_clstoken"], outputs["x_norm_patchtokens"]
 
-        if self.return_cls_token:
+        if self.return_cls_token and self.project_cls_token:
             x = torch.cat([cls_token.unsqueeze(1), x], dim=1)
 
         x = self.out(x)
 
-        if self.return_cls_token:
+        if self.return_cls_token and self.project_cls_token:
             cls_token, x = x[:, 0], x[:, 1:]
 
         x = einops.rearrange(

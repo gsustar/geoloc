@@ -126,7 +126,7 @@ class RomaMatchAnythingMatcher(torch.nn.Module):
 
 
 class LoMaMatcher(torch.nn.Module):
-    def __init__(self, name="loma_R", resolution=448, do_compile=False, filter_threshold=0.1, num_sample_keypoints=2048):
+    def __init__(self, name="loma_R", resolution=448, do_compile=False, filter_threshold=0.1, num_sample_keypoints=2048, repeated_qry_optimization=True):
         super().__init__()
         if name == "loma_R":
             cfg = LoMaR(compile=do_compile)
@@ -138,14 +138,23 @@ class LoMaMatcher(torch.nn.Module):
         self.do_compile = do_compile
         self.num_sample_keypoints = num_sample_keypoints
         self.filter_threshold = filter_threshold
+        self.repeated_qry_optimization = repeated_qry_optimization
 
     def forward(self, qry_batch, ref_batch):
         qB, qC, qH, qW = qry_batch.shape
         rB, rC, rH, rW = ref_batch.shape        
         qry_batch = TF.resize(qry_batch, size=(self.coarse_res, self.coarse_res))
         ref_batch = TF.resize(ref_batch, size=(self.coarse_res, self.coarse_res))
-        with torch.no_grad():
+
+        # Hacky way to only run on one query image
+        if self.repeated_qry_optimization:
+            keypoints_A, descriptors_A, h1, w1 = self.matcher.detect_and_describe(qry_batch[0:1], self.num_sample_keypoints)
+            keypoints_A = keypoints_A.expand(qB, -1, -1)
+            descriptors_A = descriptors_A.expand(qB, -1, -1)
+        else:
             keypoints_A, descriptors_A, h1, w1 = self.matcher.detect_and_describe(qry_batch, self.num_sample_keypoints)
+
+        with torch.no_grad():
             keypoints_B, descriptors_B, h2, w2 = self.matcher.detect_and_describe(ref_batch, self.num_sample_keypoints)
 
             scores = self.matcher(keypoints_A, keypoints_B, descriptors_A, descriptors_B)["scores"]

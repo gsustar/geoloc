@@ -1,18 +1,27 @@
 model:
   class_path: geoloc.models.contrastive.ContrastiveModel
   init_args:
+    # backbone:
+    #   class_path: geoloc.models.backbones.RADIOBackbone
+    #   init_args:
+    #     model_name: radio_v2.5-b
+    #     return_cls_token: True
+    #     out_indices: auto
+    #     out_channels: 768
     backbone:
-      class_path: geoloc.models.backbones.RADIOBackbone
+      class_path: geoloc.models.backbones.EUPEBackbone
       init_args:
-        model_name: radio_v2.5-b
+        repo_dir: /home/grega/EUPE
+        weights_path: /storage/datasets/AerialLoc/Drone2Sat/ckpts/eupe/EUPE-ViT-B.pt
         return_cls_token: True
+        project_cls_token: False
         out_indices: auto
         out_channels: 768
     aggregator:
       class_path: geoloc.models.aggregators.SALAD
       init_args:
         num_channels: 768
-        num_token_channels: 2304
+        num_token_channels: 3072
         num_clusters: 8
         cluster_dim: 128
         token_dim: 128
