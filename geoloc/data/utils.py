@@ -195,3 +195,33 @@ def get_valid_center(array: np.ndarray, mask: np.ndarray):
     distance = torch.sqrt(distances_sq[closest_idx]).item()
     
     return array[closest_y, closest_x]#, (closest_y, closest_x), distance
+
+
+def build_spatial_coords(ref_image_dataset, target_size: int):
+    def _coords_from_all_windows(all_windows):
+        bounds = all_windows.geometry.bounds
+        center_x = ((bounds["minx"] + bounds["maxx"]) / 2.0).to_numpy(dtype=np.float64)
+        center_y = ((bounds["miny"] + bounds["maxy"]) / 2.0).to_numpy(dtype=np.float64)
+        return np.stack([center_y, center_x], axis=1)
+
+    if hasattr(ref_image_dataset, "all_windows"):
+        coords = _coords_from_all_windows(ref_image_dataset.all_windows)
+    elif hasattr(ref_image_dataset, "_datasets"):
+        all_coords = []
+        for ds in ref_image_dataset._datasets:
+            if not hasattr(ds, "all_windows"):
+                raise ValueError("Expected GURS sub-dataset with `all_windows` attribute.")
+            all_coords.append(_coords_from_all_windows(ds.all_windows))
+        coords = np.concatenate(all_coords, axis=0) if len(all_coords) > 0 else np.empty((0, 2), dtype=np.float64)
+    else:
+        raise ValueError("Expected GURS reference dataset exposing `all_windows` (or `_datasets` with `all_windows`).")
+
+    if coords.shape[0] == target_size:
+        return coords
+
+    if coords.shape[0] == 0 or target_size % coords.shape[0] != 0:
+        raise ValueError(
+            f"Cannot align spatial coordinates length ({coords.shape[0]}) to vdb size ({target_size})."
+        )
+
+    return np.repeat(coords, target_size // coords.shape[0], axis=0)

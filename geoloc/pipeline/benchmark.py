@@ -26,7 +26,7 @@ from geoloc.utils import DEBUG, crs_transform, load_model, get_model_type, get_d
 from geoloc.eval.metrics import calculate_distances, calculate_intersections, hit_at_k, tp_at_k, safe_rank1, rank1_or_sentinel, reciprocal_rank_from_rank1, average_precision
 from geoloc.eval.utils import write_resdict_to_file, write_pretty_table, segvlad_get_matches, inlier_distribution_check, get_ref_points
 from geoloc.eval.homography import predict_qry_camera_position
-from geoloc.data.utils import collate_with_geometry
+from geoloc.data.utils import collate_with_geometry, build_spatial_coords
 from geoloc.models.reranking import rerank
 
 INDEX_BASED_DATASETS = ["vpair", "alto", "ortholoc"]
@@ -71,34 +71,34 @@ def get_position_keys(dataset_type: str) -> tuple:
     return ("lon", "lat")
 
 
-def _build_spatial_coords(ref_image_dataset, lon_key: str, lat_key: str, target_size: int):
-    def _coords_from_all_windows(all_windows):
-        bounds = all_windows.geometry.bounds
-        center_x = ((bounds["minx"] + bounds["maxx"]) / 2.0).to_numpy(dtype=np.float64)
-        center_y = ((bounds["miny"] + bounds["maxy"]) / 2.0).to_numpy(dtype=np.float64)
-        return np.stack([center_y, center_x], axis=1)
+# def _build_spatial_coords(ref_image_dataset, target_size: int):
+#     def _coords_from_all_windows(all_windows):
+#         bounds = all_windows.geometry.bounds
+#         center_x = ((bounds["minx"] + bounds["maxx"]) / 2.0).to_numpy(dtype=np.float64)
+#         center_y = ((bounds["miny"] + bounds["maxy"]) / 2.0).to_numpy(dtype=np.float64)
+#         return np.stack([center_y, center_x], axis=1)
 
-    if hasattr(ref_image_dataset, "all_windows"):
-        coords = _coords_from_all_windows(ref_image_dataset.all_windows)
-    elif hasattr(ref_image_dataset, "_datasets"):
-        all_coords = []
-        for ds in ref_image_dataset._datasets:
-            if not hasattr(ds, "all_windows"):
-                raise ValueError("Expected GURS sub-dataset with `all_windows` attribute.")
-            all_coords.append(_coords_from_all_windows(ds.all_windows))
-        coords = np.concatenate(all_coords, axis=0) if len(all_coords) > 0 else np.empty((0, 2), dtype=np.float64)
-    else:
-        raise ValueError("Expected GURS reference dataset exposing `all_windows` (or `_datasets` with `all_windows`).")
+#     if hasattr(ref_image_dataset, "all_windows"):
+#         coords = _coords_from_all_windows(ref_image_dataset.all_windows)
+#     elif hasattr(ref_image_dataset, "_datasets"):
+#         all_coords = []
+#         for ds in ref_image_dataset._datasets:
+#             if not hasattr(ds, "all_windows"):
+#                 raise ValueError("Expected GURS sub-dataset with `all_windows` attribute.")
+#             all_coords.append(_coords_from_all_windows(ds.all_windows))
+#         coords = np.concatenate(all_coords, axis=0) if len(all_coords) > 0 else np.empty((0, 2), dtype=np.float64)
+#     else:
+#         raise ValueError("Expected GURS reference dataset exposing `all_windows` (or `_datasets` with `all_windows`).")
 
-    if coords.shape[0] == target_size:
-        return coords
+#     if coords.shape[0] == target_size:
+#         return coords
 
-    if coords.shape[0] == 0 or target_size % coords.shape[0] != 0:
-        raise ValueError(
-            f"Cannot align spatial coordinates length ({coords.shape[0]}) to vdb size ({target_size})."
-        )
+#     if coords.shape[0] == 0 or target_size % coords.shape[0] != 0:
+#         raise ValueError(
+#             f"Cannot align spatial coordinates length ({coords.shape[0]}) to vdb size ({target_size})."
+#         )
 
-    return np.repeat(coords, target_size // coords.shape[0], axis=0)
+#     return np.repeat(coords, target_size // coords.shape[0], axis=0)
 
 def benchmark_main(vdbdir: str, traj_config, use_fp16=True, profile=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -164,7 +164,7 @@ def benchmark_main(vdbdir: str, traj_config, use_fp16=True, profile=False):
 
     if use_radius_policy:
         try:
-            spatial_coords = _build_spatial_coords(ref_image_dataset, lon_key=lon_key, lat_key=lat_key, target_size=vdb.size())
+            spatial_coords = build_spatial_coords(ref_image_dataset, target_size=vdb.size())
             vdb.set_spatial_index(spatial_coords, crs=ref_image_dataset.crs)
             print(f"Radius search policy enabled for {dataset_type} with radius {radius_search_meters:.1f} m.")
         except Exception as e:
