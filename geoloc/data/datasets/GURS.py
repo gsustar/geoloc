@@ -1,10 +1,13 @@
 import os
+import cv2
 import torch
 import shapely
 import rasterio
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import h5py
+import hdf5plugin
 
 from shapely.geometry import box
 from shapely.prepared import prep
@@ -56,6 +59,13 @@ class GURSDataset:
         self.min_east, self.min_north, self.max_east, self.max_north = (
             self.disc_border_polygon.bounds
         )
+
+        # self.slo_dem_origin_bl = (374000, 31000)
+        self.slo_dem_origin_tl = (374000, 195000)
+        # self.slo_dem_origin_br = (626000, 31000)
+        # self.slo_dem_origin_tr = (626000, 195000)
+        self.dem_path = os.path.join(self.root, "dem_slovenija_2014.h5")
+        self.dem_mask_path = os.path.join(self.root, "slovenia.hd5")
 
     def _load_info_csv(self, date_filter: str = None):
         info = pd.read_csv(
@@ -138,6 +148,20 @@ class GURSDataset:
                 )
             )
         return combined_dfs
+    
+    def _get_dem_for_window(self, win_bounds):
+        with h5py.File(self.dem_path, "r") as dem_f:
+            dem = dem_f["dem"]
+
+            i0 = int(self.slo_dem_origin_tl[1] - win_bounds[3])
+            i1 = int(self.slo_dem_origin_tl[1] - win_bounds[1])
+            j0 = int(win_bounds[0] - self.slo_dem_origin_tl[0])
+            j1 = int(win_bounds[2] - self.slo_dem_origin_tl[0])
+
+            dem_data = np.nan_to_num(dem[i0:i1, j0:j1], nan=0.0)
+            dem_data = cv2.resize(dem_data, (self.tile_size, self.tile_size), interpolation=cv2.INTER_NEAREST)
+
+            return dem_data
     
     def get_data_from_footprint(self, footprint):
         win_bounds = box(*footprint.bounds)
@@ -320,14 +344,20 @@ class GURSReferenceDataset(SequentialGURSDataset):
         if self.transforms is not None:
             mosaic = self.transforms(mosaic)
 
+        dem = self._get_dem_for_window(win_bounds.bounds)
+        dem = cv2.resize(dem, (mosaic.shape[-2], mosaic.shape[-1]), interpolation=cv2.INTER_NEAREST)
+        dem = torch.from_numpy(dem).float()
+
         return dict(
             image=mosaic,
             filename=relevant_tifs["DATOTEKA"].values[0],
             index=index,
             east=east,
             north=north,
+            dem=dem,
             geometry=win_bounds
         )
+
     def _get_gt_windows(self, footprint, overlap_threshold=0.5):
         candidates = self.all_windows[self.all_windows.intersects(footprint)]
         intersection_area = candidates.intersection(footprint).area

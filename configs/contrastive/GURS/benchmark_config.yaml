@@ -13,8 +13,10 @@ benchmark_recall_at_xmeters: [100, 150, 200, 250, 500, 1000]
 dataset:
   class_path: geoloc.data.datasets.ViCoS.AformXQueryImages
   init_args:
-    query_dir: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part2
-    metadata_path: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part2_3fps_1080p_telemetry.csv
+    # query_dir: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part2
+    # metadata_path: /storage/private/MORS/AFORMX_GOPRO/frames_3fps_1080p/AFormX-flight3-part2_3fps_1080p_telemetry.csv
+    query_dir: /storage/private/MORS/AFORMX_GOPRO/gopro_3fps/AFormX-flight3-part1/mav0/cam0/data
+    metadata_path: /storage/private/MORS/AFORMX_GOPRO/gopro_3fps/AFormX-flight3-part1/frame_telemetry.csv
     skip_first_n_frames: 600
     skip_last_n_frames: 600
     transforms:
@@ -31,7 +33,7 @@ dataset:
 reranking:
   batch_size: 1
   matcher:
-    class_path: geoloc.models.reranking.LoMaMatcher
+    class_path: geoloc.models.matchers.LoMaMatcher
     init_args:
       resolution: 364
       name: loma_R
@@ -49,7 +51,11 @@ reranking:
     #   do_compile: False
 
   ransac:
-    class_path: geoloc.models.reranking.OpenCVRANSAC
+    # class_path: geoloc.opencv.HomographyEstimator
+    # init_args:
+    #   reproj_threshold: 5.0
+    #   maxIters: 5000
+    class_path: geoloc.opencv.PnPSolver
     init_args:
-      reproj_threshold: 5.0
-      maxIters: 5000
+      reproj_threshold: 2.0
+      maxIters: 2000

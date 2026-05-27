@@ -1,7 +1,5 @@
-ROTTRAJ_EXP: False
-VISUALIZE_VLAD: False
 VISUALIZE_TOP_K: True
-VISUALIZE_HEATMAP: True
+VISUALIZE_HEATMAP: False
 
 every_n: 1
 benchmark_top_k: [1, 5, 10, 25, 50, 100]
@@ -11,7 +9,7 @@ dataset:
   class_path: geoloc.data.datasets.VisLoc.VisLocQueryImages
   init_args:
     root: /storage/datasets/AerialLoc/UAV_VisLoc/
-    flight_idx: 1
+    flight_idx: 3
     transforms:
       class_path: torchvision.transforms.Compose
       init_args:

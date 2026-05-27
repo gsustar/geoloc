@@ -416,7 +416,8 @@ class RADIOBackbone(nn.Module, MultiScaleOutputMixin):
         ):
         super().__init__()
         self.model_name = model_name
-        self.backbone = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_name, progress=False, skip_validation=True, force_reload=True)
+        # self.backbone = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_name, progress=False, skip_validation=True, force_reload=True)
+        self.backbone = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_name, progress=False, skip_validation=True, force_reload=False)
         self.backbone = freeze(self.backbone)
         self.return_cls_token = return_cls_token
         # self.backbone = unfreeze_layers(self.backbone, num_trainable_blocks)

@@ -23,7 +23,7 @@ dataset:
   class_path: geoloc.data.datasets.VisLoc.VisLocReferenceImages
   init_args:
     root: /storage/datasets/AerialLoc/UAV_VisLoc/
-    flight_idx: 5
+    flight_idx: 1
     tile_size: 1000
     stride: null
     transforms: null

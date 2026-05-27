@@ -1,0 +1,29 @@
+ROTREF_EXP: False
+SAVE_REF_SALAD_MATRIX: False
+
+savedir: &savedir /storage/datasets/AerialLoc/Drone2Sat/vdbs/EUPE/VisLoc/eupe_salad_3
+
+model:
+  class_path: geoloc.models.contrastive.STContrastiveModel
+  load_checkpoint: /home/grega/geoloc/logs/checkpoints/contrastivemodel/BigBoy/contrastivemodel_agg:salad_lr:1e-04_sch:warmupcosineannealinglr_loss:sigliploss_ds:BigBoyTrainDataset_ep:50_20260428_141149/last.ckpt
+
+dataset:
+  class_path: geoloc.data.datasets.VisLoc.VisLocReferenceImages
+  init_args:
+    root: /storage/datasets/AerialLoc/UAV_VisLoc/
+    flight_idx: 3
+    tile_size: 1000
+    transforms:
+      class_path: torchvision.transforms.Compose
+      init_args:
+        transforms:
+          - class_path: torchvision.transforms.Resize
+            init_args:
+              size: 504
+
+vdb:
+  class_path: geoloc.data.vdb.VectorDatabase
+  init_args:
+    vdim:  1152
+    distfn: cosine
+    norm_vec: True

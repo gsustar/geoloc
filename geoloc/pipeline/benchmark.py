@@ -25,9 +25,9 @@ from geoloc.config_parser import load_config, save_config, class_from_config
 from geoloc.utils import DEBUG, crs_transform, load_model, get_model_type, get_dataset_type, requires_arg
 from geoloc.eval.metrics import calculate_distances, calculate_intersections, hit_at_k, tp_at_k, safe_rank1, rank1_or_sentinel, reciprocal_rank_from_rank1, average_precision
 from geoloc.eval.utils import write_resdict_to_file, write_pretty_table, segvlad_get_matches, inlier_distribution_check, get_ref_points
-from geoloc.eval.homography import predict_qry_camera_position
+from geoloc.eval.camera_localization import predict_qry_camera_position, predict_qry_camera_position_pnp, get_K_match_space
 from geoloc.data.utils import collate_with_geometry, build_spatial_coords
-from geoloc.models.reranking import rerank
+from geoloc.eval.reranking import rerank
 
 INDEX_BASED_DATASETS = ["vpair", "alto", "ortholoc"]
 DISTANCE_BASED_DATASETS = ["visloc", "ges", "vicos"]
@@ -103,7 +103,7 @@ def get_position_keys(dataset_type: str) -> tuple:
 def benchmark_main(vdbdir: str, traj_config, use_fp16=True, profile=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     build_config = load_config(os.path.join(vdbdir, "build_config.yaml"))
-    model = load_model(build_config).eval().to(device)
+    model = load_model(build_config, do_compile=False).eval().to(device)
 
     ref_image_dataset = class_from_config(build_config.dataset)
     qry_image_dataset = class_from_config(traj_config.dataset)
@@ -156,7 +156,7 @@ def benchmark_main(vdbdir: str, traj_config, use_fp16=True, profile=False):
         and radius_search_meters > 0.0
     )
 
-    if matcher.do_compile:
+    if matcher is not None and hasattr(matcher, "do_compile"):
         print("Forcing compilation of matcher...")
         dummy_input = torch.randn(rerank_batch_size, 3, matcher.coarse_res, matcher.coarse_res).to(device=device, dtype=torch.float16).contiguous()
         for _ in range(10):
@@ -534,12 +534,18 @@ def benchmark_single(
         inds, dists = segvlad_get_matches(dists, inds, ref_imInds, n=max(benchmark_top_k)) # !! this is not distances, just accumulated similarities
     
     all_num_inliers = None
+    all_num_outliers = None
     all_homographies = None
     passed_distribution_check = None
+    idcscore = 0.0
     if matcher is not None:
         with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_fp16):
             rerank_start_time = time.time()
-            rerank_res = rerank(matcher, ransac, image, ref_image_dataset, inds, dists, device=device, batch_size=rerank_batch_size)
+            # rerank_res = rerank(
+            #     matcher=matcher, ransac=ransac, qry_image=image, ref_image_dataset=ref_image_dataset, inds=inds, dists=dists, device=device, batch_size=rerank_batch_size)
+            rerank_res = rerank(
+                matcher=matcher, ransac=ransac, qry_image=image, ref_image_dataset=ref_image_dataset, inds=inds, dists=dists, device=device, batch_size=rerank_batch_size, ransac_mode="pnp", K=get_K_match_space(match_size=image.shape[1])
+            )
             rerank_time = time.time() - rerank_start_time
         dists = rerank_res["dists"]
         inds = rerank_res["inds"]
@@ -558,10 +564,15 @@ def benchmark_single(
 
     if is_distance_based:
         ref_points = get_ref_points(inds, ref_image_dataset, benchmark_top_k)
-        # gdists, ref_points = calculate_distances(
-        #     qry, benchmark_top_k, inds, qry_image_dataset, ref_image_dataset, lon_key, lat_key
-        # )
-        # top_ref_point = ref_points[0]
+
+        for rpi in range(5):
+            campos, (camyaw, campitch, camroll) = predict_qry_camera_position_pnp(
+                R=rerank_res["all_Rs"][rpi],
+                tvec=rerank_res["all_tvecs"][rpi],
+            )
+            camx, camy, camz = campos.squeeze()
+            ref_points[rpi] = (camx, camy)
+        
         if (all_homographies is not None 
             and len(all_homographies) > 0
             and dataset_type in ["vicos", "ges"]
@@ -574,13 +585,6 @@ def benchmark_single(
                     tile_size = ref_image_dataset.tile_size
                 except AttributeError:
                     tile_size = ref_image_dataset.get_tile_size_for_index(inds[0, 0] % len(ref_image_dataset)) # Necessary for MultiTileSizeDataset
-                # top_ref_point = apply_homography_to_ref_point(
-                #     top_ref_point,
-                #     all_homographies[0],
-                #     query_image_shape=(1080, 1080), #!!! hardcoded for now. problem is resizing in dataset that breaks the pix_res assumption.
-                #     reference_image_shape=(tile_size, tile_size),
-                #     meters_per_pixel=ref_image_dataset.pxl_res,
-                # )
                 ref_points[rpi] = predict_qry_camera_position(
                     ref_center_point=curr_ref_point,
                     ref_original_shape=(tile_size, tile_size),
@@ -640,7 +644,7 @@ def benchmark_single(
             lat_key: ref_point[lat_key],
         }
         
-        gt_pos = qry["gt_pos"]
+        gt_pos = qry["gt_pos"][0].tolist()
         retrieved = (inds[0, :] % len(ref_image_dataset)).astype(int)
         gt_set = set(gt_pos if isinstance(gt_pos, (list, tuple, np.ndarray)) else [gt_pos])
 
@@ -699,7 +703,7 @@ def benchmark_single(
         vis_kwargs["all_num_inliers"] = all_num_inliers
         vis_kwargs["all_num_outliers"] = all_num_outliers
         vis_kwargs["gt_pos"] = gt_pos
-        vis_kwargs["passed_distribution_check"] = passed_distribution_check
+        vis_kwargs["passed_distribution_check"] = passed_distribution_check or False
         vis_kwargs["idcscore"] = idcscore
         # else:
         #     vis_kwargs["gt_pos"] = qry["gt_pos"]
@@ -754,12 +758,13 @@ def benchmark_single(
             always_draw=True,
             save_path=os.path.join(savedir, f"matches_q{query_ix:05d}.png")
         )
-        visualize_warp(
-            im_A=imA,
-            im_B=imB,
-            H=torch.as_tensor(rerank_res["all_homographies"][0]),
-            save_path=os.path.join(savedir, f"warp_q{query_ix:05d}.png")
-        )
+        if all_homographies is not None:
+            visualize_warp(
+                im_A=imA,
+                im_B=imB,
+                H=torch.as_tensor(rerank_res["all_homographies"][0]),
+                save_path=os.path.join(savedir, f"warp_q{query_ix:05d}.png")
+            )
 
 
     if save_salad_matrix and salad_matrix is not None:

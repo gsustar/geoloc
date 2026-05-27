@@ -91,9 +91,10 @@ def build_datasets(args):
 
 
 def build_reranker(args, device):
-    from geoloc.models.reranking import RomaMatchAnythingMatcher, OpenCVRANSAC
+    from geoloc.geoloc.opencv import HomographyEstimator
+    from geoloc.models.matchers import RomaMatchAnythingMatcher
 
-    ransac = OpenCVRANSAC(maxIters=2000, reproj_threshold=1.0)
+    ransac = HomographyEstimator(maxIters=2000, reproj_threshold=1.0)
     reranker = RomaMatchAnythingMatcher(
         coarse_res=args.image_size,
         upsample_res=864,
@@ -130,7 +131,7 @@ def run_warmup(reranker, ransac,dataset_gurs, query_image, inds, dists, device, 
     This ensures torch.compile fully traces and caches before profiling starts.
     Using a different query index avoids any caching effects on the real benchmark.
     """
-    from geoloc.models.reranking import rerank
+    from geoloc.eval.reranking import rerank
 
     print(f"\n{'='*60}")
     print(f"  WARMUP  ({args.warmup_iters} iterations via rerank(), "
@@ -161,7 +162,7 @@ def run_warmup(reranker, ransac,dataset_gurs, query_image, inds, dists, device, 
 
 def run_benchmark(reranker, ransac, dataset_gurs, query_image, inds, dists, device,
                   args, results, ix):
-    from geoloc.models.reranking import rerank
+    from geoloc.eval.reranking import rerank
     from pyinstrument import Profiler
 
     print(f"{'='*60}")

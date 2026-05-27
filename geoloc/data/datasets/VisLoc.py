@@ -12,6 +12,8 @@ from rasterio.windows import Window
 from shapely.geometry import box
 
 from ..utils import pad_to_size, get_sorted_imgpaths, load_image
+import warnings
+warnings.filterwarnings("ignore", message="Geometry is in a geographic CRS")
 
 
 class VisLocReferenceImages(torch.utils.data.Dataset):
@@ -57,7 +59,12 @@ class VisLocReferenceImages(torch.utils.data.Dataset):
                 w = min(self.tile_size, self.tif_width - x)
                 h = min(self.tile_size, self.tif_height - y)
                 self.tiles.append((x, y, w, h))
-                geometries.append(box(x, y, x + w, y + h))
+                # Convert pixel corners to geographic coords
+                # rasterio xy() takes (row, col) — y is row, x is col
+                left, top = xy(self.transform, y, x, offset="ul")
+                right, bottom = xy(self.transform, y + h, x + w, offset="ul")
+                geometries.append(box(left, bottom, right, top))
+                # geometries.append(box(x, y, x + w, y + h))
         self.all_windows = gpd.GeoDataFrame(
              geometry=geometries,
              crs=self.crs
