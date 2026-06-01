@@ -61,6 +61,10 @@ class PnPSolver:
         if isinstance(matchedB, torch.Tensor):
             matchedB = matchedB.cpu().numpy()
 
+        if matchedA.ndim == 1:
+            matchedA = matchedA[None, :]
+        if matchedB.ndim == 1:
+            matchedB = matchedB[None, :]
         matchedA = matchedA[matchedA[:, 0] >= 0]
         matchedB = matchedB[matchedB[:, 0] >= 0]
 
