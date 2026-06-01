@@ -8,6 +8,7 @@ scipy
 prettytable
 psutil
 natsort
+hdf5plugin
 
 timm
 kornia
