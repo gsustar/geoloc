@@ -2,7 +2,7 @@
 
 ```bash
 # create conda environment
-conda create -n geoloc python=3.10
+conda create -n geoloc python=3.12
 conda activate geoloc
 
 # install requirements
@@ -12,11 +12,11 @@ conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
 
 ### (For NVIDIA Jetson AGX Thor) - [ARM64 with Jetpack 7.0 and CUDA 13.0]
 pip install -r requirements_thor.txt
-conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
+conda install -c conda-forge -c nvidia faiss-gpu=1.9.0
 
 ### (For NVIDIA Jetson AGX Orin) - [ARM64 with Jetpack 6.2 and CUDA 12.6]
 pip install -r requirements_orin.txt
-conda install -c pytorch -c conda-forge -c nvidia faiss-gpu=1.9.0
+conda install -c conda-forge -c nvidia faiss-gpu=1.9.0
 ```
 ```bash
 cd geoloc/third_party/LoMa/

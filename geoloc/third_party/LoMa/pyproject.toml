@@ -8,16 +8,16 @@ authors = [
     { name = "David Nordström", email = "davnords@chalmers.se" }
 ]
 requires-python = ">=3.10"
-dependencies = [
+#dependencies = [
     #"dataclasses>=0.8",
-    "einops>=0.8.1",
-    "opencv-python",
-    "pillow>=12.0.0",
-    "torch",
-    "torchvision>=0.23.0",
-    "tqdm>=4.67.1",
-    "tyro",
-]
+    #"einops>=0.8.1",
+    #"opencv-python",
+    #"pillow>=12.0.0",
+    #"torch",
+    #"torchvision>=0.23.0",
+    #"tqdm>=4.67.1",
+    #"tyro",
+#]
 
 [build-system]
 requires = ["uv_build>=0.8.15,<0.9.0"]

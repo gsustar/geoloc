@@ -8,19 +8,19 @@ authors = [
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "albumentations",
-    "einops",
-    "h5py",
-    "kornia",
+#    "albumentations",
+#    "einops",
+#    "h5py",
+#    "kornia",
     "loguru",
-    "matplotlib",
-    "opencv-python",
-    #"poselib>=2.0.4",
-    "timm",
-    "torch>=2.5.1",
-    "torchvision",
-    "tqdm",
-    "wandb",
+#    "matplotlib",
+#    "opencv-python",
+#    #"poselib>=2.0.4",
+#    "timm",
+#    "torch>=2.5.1",
+#    "torchvision",
+#    "tqdm",
+#    "wandb",
 ]
 
 [project.optional-dependencies]

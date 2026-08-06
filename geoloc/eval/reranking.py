@@ -26,16 +26,19 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
     R = []
     tvec = []
     masks = []
+    covs = []
     for kA, kB, dem, geom in zip(kptsA, kptsB, dems, geoms):
         valid_mask = (kA[:, 0] >= 0) & (kA[:, 1] >= 0) & (kB[:, 0] >= 0) & (kB[:, 1] >= 0)
-        kA = kA[valid_mask]
-        kB = kB[valid_mask]
-        R_i, tvec_i, mask_i = pnp_solver(kA.float(), kB.float(), K, dem, geom)
+        kA_f = kA[valid_mask]
+        kB_f = kB[valid_mask]
+        R_i, tvec_i, mask_i, cov_i = pnp_solver(kA_f.float(), kB_f.float(), K, dem, geom)
         R.append(R_i)
         tvec.append(tvec_i)
-        # TODO: mask must be a tensor
-        mask_i = torch.nn.functional.pad(mask_i, (0, 0, 0, kptsA.shape[1] - mask_i.shape[0]), value=False)
-        masks.append(mask_i.squeeze(0))
+        covs.append(cov_i)
+        # scatter the inlier mask back to the original keypoint rows
+        full_mask = torch.zeros((kA.shape[0], 1), dtype=torch.bool)
+        full_mask[valid_mask] = mask_i.to(full_mask.device)
+        masks.append(full_mask)
     num_inliers = torch.stack([m.sum() for m in masks])
     if len(R) > 0:
         R = torch.stack(R, dim=0)
@@ -43,7 +46,7 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
         tvec = torch.stack(tvec, dim=0)
     if len(masks) > 0:
         masks = torch.stack(masks, dim=0)
-    return R, tvec, masks, num_inliers
+    return R, tvec, masks, num_inliers, covs
 
 
 def rerank(
@@ -69,6 +72,7 @@ def rerank(
     all_homographies = []
     all_Rs = []
     all_tvecs = []
+    all_covs = []
     all_num_outliers = []
     all_kptsA = []
     all_kptsB = []
@@ -82,9 +86,10 @@ def rerank(
             Hs, masks, num_inliers = estimate_homography(kptsA, kptsB, ransac)
             all_homographies.append(Hs)
         elif ransac_mode == "pnp":
-            Rs, tvecs, masks, num_inliers = estimate_pose_pnp(kptsA, kptsB, K, batch["dem"], batch["geometry"], ransac)
+            Rs, tvecs, masks, num_inliers, covs = estimate_pose_pnp(kptsA, kptsB, K, batch["dem"], batch["geometry"], ransac)
             all_Rs.append(Rs)
             all_tvecs.append(tvecs)
+            all_covs.extend(covs)
         else:
             raise ValueError(f"Invalid ransac_mode: {ransac_mode}")
         
@@ -119,6 +124,7 @@ def rerank(
     elif ransac_mode == "pnp":
         all_Rs = all_Rs[sorted_order]
         all_tvecs = all_tvecs[sorted_order]
+        all_covs = [all_covs[j] for j in sorted_order]
 
     return dict(
         inds=inds,
@@ -127,6 +133,7 @@ def rerank(
         all_homographies=all_homographies.tolist() if ransac_mode == "homography" else None,
         all_Rs=all_Rs.tolist() if ransac_mode == "pnp" else None,
         all_tvecs=all_tvecs.tolist() if ransac_mode == "pnp" else None,
+        all_pose_covs=all_covs if ransac_mode == "pnp" else None,
         all_num_outliers=all_num_outliers.tolist(),
         qry_kpts=all_kptsA.tolist(),
         ref_kpts=all_kptsB.tolist(),

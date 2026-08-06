@@ -109,7 +109,7 @@ class SelfBlock(nn.Module):
         # if encoding is not None:
         q = apply_cached_rotary_emb(encoding, q)
         k = apply_cached_rotary_emb(encoding, k)
-        context = F.scaled_dot_product_attention(q, k, v)
+        context = F.scaled_dot_product_attention(q, k, v.contiguous())
         message = self.out_proj(context.transpose(1, 2).flatten(start_dim=-2))
         return x + self.ffn(torch.cat([x, message], -1))
 
