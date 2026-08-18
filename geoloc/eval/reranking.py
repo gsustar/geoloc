@@ -26,15 +26,15 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
     R = []
     tvec = []
     masks = []
-    covs = []
+    # covs = []
     for kA, kB, dem, geom in zip(kptsA, kptsB, dems, geoms):
         valid_mask = (kA[:, 0] >= 0) & (kA[:, 1] >= 0) & (kB[:, 0] >= 0) & (kB[:, 1] >= 0)
         kA_f = kA[valid_mask]
         kB_f = kB[valid_mask]
-        R_i, tvec_i, mask_i, cov_i = pnp_solver(kA_f.float(), kB_f.float(), K, dem, geom)
+        R_i, tvec_i, mask_i = pnp_solver(kA_f.float(), kB_f.float(), K, dem, geom)
         R.append(R_i)
         tvec.append(tvec_i)
-        covs.append(cov_i)
+        # covs.append(cov_i)
         # scatter the inlier mask back to the original keypoint rows
         full_mask = torch.zeros((kA.shape[0], 1), dtype=torch.bool)
         full_mask[valid_mask] = mask_i.to(full_mask.device)
@@ -46,7 +46,7 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
         tvec = torch.stack(tvec, dim=0)
     if len(masks) > 0:
         masks = torch.stack(masks, dim=0)
-    return R, tvec, masks, num_inliers, covs
+    return R, tvec, masks, num_inliers #, covs
 
 
 def rerank(
@@ -93,7 +93,7 @@ def rerank(
             Hs, masks, num_inliers = estimate_homography(kptsA, kptsB, ransac)
             all_homographies.append(Hs)
         elif ransac_mode == "pnp":
-            Rs, tvecs, masks, num_inliers, covs = estimate_pose_pnp(kptsA, kptsB, K, batch["dem"], batch["geometry"], ransac)
+            Rs, tvecs, masks, num_inliers = estimate_pose_pnp(kptsA, kptsB, K, batch["dem"], batch["geometry"], ransac)
             all_Rs.append(Rs)
             all_tvecs.append(tvecs)
             # all_covs.extend(covs)
