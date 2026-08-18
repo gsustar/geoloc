@@ -26,8 +26,14 @@ cd geoloc/third_party/RoMa/
 pip install -e .
 
 cd geoloc
-pip install -e .
+pip install .
 ```
+
+```python
+### Clone EUPE repository
+git clone org-16943930@github.com:facebookresearch/EUPE.git
+```
+Make sure to also change the `repo_dir` and `weights_path` in the `/models/vpr/eupe_salad_20260428_141149/train_config.yaml` to the appropriate values. Additionally download the [`EUPE-ViT-B.pt`](https://huggingface.co/facebook/EUPE-ViT-B/) weights
 
 ### **! ! ! NOTE - Installing torch and torchvision on AGX Orin ! ! !**
 https://forums.developer.nvidia.com/t/pytorch-2-8-0-on-jetson-orin-nano-importerror-libcudss-so-0-not-found/346195
@@ -66,8 +72,4 @@ wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge
 ### For running SegVLAD/RevisitAnything
 ```bash
 pip install git+https://github.com/facebookresearch/segment-anything.git
-```
-### For running on OrthoLoC dataset
-```bash
-# TODO
 ```

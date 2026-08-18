@@ -93,7 +93,7 @@ class PnPSolver:
             tvec = None
             inliers = None
 
-        cov_info = None
+        # cov_info = None
         if rvec is not None and tvec is not None and inliers is not None and success:
             # solvePnPRansac returns inlier INDICES, not a boolean mask
             inlier_idx = np.asarray(inliers, dtype=np.int64).reshape(-1)
@@ -101,9 +101,9 @@ class PnPSolver:
             img_in = image_points[inlier_idx]
             if self.refine_lm and inlier_idx.shape[0] >= 4:
                 rvec, tvec = refine_pose_lm(obj_in, img_in, K, rvec, tvec)
-            cov_info = pnp_pose_covariance(
-                obj_in, img_in, K, rvec, tvec, sigma_floor_px=self.sigma_floor_px
-            )
+            # cov_info = pnp_pose_covariance(
+            #     obj_in, img_in, K, rvec, tvec, sigma_floor_px=self.sigma_floor_px
+            # )
             R, _ = cv2.Rodrigues(rvec)
             # undo the centering: t_world = t_centered - R m
             tvec = np.asarray(tvec, dtype=np.float64).reshape(3, 1) - R @ centroid.reshape(3, 1)
@@ -120,4 +120,109 @@ class PnPSolver:
             tvec = torch.zeros((3, 1))
             inliers = torch.zeros((num_input, 1), dtype=torch.bool)
 
-        return R, tvec, inliers, cov_info
+        return R, tvec, inliers #, cov_info
+
+
+
+# class BootstrapPnPSolver:
+
+#     def __init__(self, reproj_threshold=1.0, maxIters=1000, n_bootstrap=100, min_inliers=0):
+#         self.n_bootstrap = n_bootstrap
+#         self.min_inliers = min_inliers
+#         self._solvePnP = (lambda K, object_points, image_points:
+#             cv2.solvePnPRansac(
+#                 object_points,
+#                 image_points,
+#                 K,
+#                 distCoeffs=None,
+#                 iterationsCount=maxIters,
+#                 reprojectionError=reproj_threshold,
+#                 confidence=0.999,
+#                 flags=cv2.SOLVEPNP_EPNP
+#             )
+#         )
+
+#     def __call__(self, kptA, kptB, K, dem, geom):
+#         rh, rw = dem.shape
+#         minx, miny, maxx, maxy = geom.bounds
+
+#         matchedA = kptA.squeeze()
+#         matchedB = kptB.squeeze()
+#         if isinstance(matchedA, torch.Tensor):
+#             matchedA = matchedA.cpu().numpy()
+#         if isinstance(matchedB, torch.Tensor):
+#             matchedB = matchedB.cpu().numpy()
+
+#         if matchedA.ndim == 1:
+#             matchedA = matchedA[None, :]
+#         if matchedB.ndim == 1:
+#             matchedB = matchedB[None, :]
+#         num_input = matchedA.shape[0]
+#         valid = (matchedA[:, 0] >= 0) & (matchedB[:, 0] >= 0)
+#         matchedA = matchedA[valid]
+#         matchedB = matchedB[valid]
+
+#         matchedB_world = np.zeros((matchedB.shape[0], 3), dtype=np.float64)
+#         matchedB_world[:, 0] = matchedB[:, 0] / rw * (maxx - minx) + minx
+#         matchedB_world[:, 1] = (1 - matchedB[:, 1] / rh) * (maxy - miny) + miny
+#         matchedB_world[:, 2] = dem[matchedB[:, 1].astype(int), matchedB[:, 0].astype(int)]
+
+#         object_points = matchedB_world
+#         image_points = np.ascontiguousarray(matchedA, dtype=np.float64)
+#         n_points = object_points.shape[0]
+
+#         rvecs = []
+#         tvecs = []
+#         n_inliers = []
+#         if n_points >= 4:
+#             for _ in range(self.n_bootstrap):
+#                 sample_idx = np.random.randint(0, n_points, size=n_points)
+#                 success, rvec, tvec, inliers = self._solvePnP(
+#                     K, object_points[sample_idx], image_points[sample_idx]
+#                 )
+#                 n_inl = 0 if inliers is None else len(inliers)
+#                 if success and n_inl >= self.min_inliers:
+#                     rvecs.append(np.asarray(rvec, dtype=np.float64).reshape(3))
+#                     tvecs.append(np.asarray(tvec, dtype=np.float64).reshape(3))
+#                     n_inliers.append(n_inl)
+
+#         if len(rvecs) > 0:
+#             rvecs = np.stack(rvecs, axis=0)
+#             tvecs = np.stack(tvecs, axis=0)
+#             ddof = 1 if rvecs.shape[0] > 1 else 0
+#             # point estimate = the bootstrap resample with the most RANSAC inliers,
+#             # not the mean across resamples (the mean can average out of an
+#             # actual, self-consistent solution into one that fits nothing)
+#             best_idx = int(np.argmax(n_inliers))
+#             rvec_best_np = rvecs[best_idx]
+#             tvec_best_np = tvecs[best_idx]
+#             R_best, _ = cv2.Rodrigues(rvec_best_np)
+
+#             delta_rvecs = np.zeros_like(rvecs)
+#             centers = np.zeros_like(tvecs)
+#             for i in range(rvecs.shape[0]):
+#                 R_i, _ = cv2.Rodrigues(rvecs[i])
+#                 delta_rvec, _ = cv2.Rodrigues(R_best.T @ R_i)
+#                 delta_rvecs[i] = delta_rvec.reshape(3)
+#                 centers[i] = -(R_i.T @ tvecs[i].reshape(3, 1)).reshape(3)
+
+#             pose_var = {
+#                 "rvec_mean": rvec_best_np.tolist(),
+#                 "tvec_mean": tvec_best_np.tolist(),
+#                 "rvec_var": delta_rvecs.var(axis=0, ddof=ddof).tolist(),
+#                 "tvec_var": centers.var(axis=0, ddof=ddof).tolist(),
+#                 "n_success": rvecs.shape[0],
+#             }
+#             R_mean = torch.from_numpy(R_best).float()
+#             tvec_mean = torch.from_numpy(tvec_best_np).float().reshape(3, 1)
+#         else:
+#             R_mean = torch.eye(3)
+#             tvec_mean = torch.zeros((3, 1))
+#             pose_var = None
+
+#         # mask of input rows that had a valid match and so entered the bootstrap
+#         mask = np.zeros(num_input, dtype=bool)
+#         mask[valid] = True
+#         mask = torch.from_numpy(mask).unsqueeze(1)
+
+#         return R_mean, tvec_mean, mask, pose_var
