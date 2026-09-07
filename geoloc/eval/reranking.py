@@ -51,7 +51,7 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
 
 def rerank(
     matcher, ransac, qry_image, ref_image_dataset, inds, ransac_mode="homography", K=None, dists=None, device=None, batch_size=1,
-    bootstrap_ransac=None
+    # bootstrap_ransac=None
 ):
     assert matcher is not None, "Matcher model must be provided"
     # if isinstance(inds, np.ndarray):

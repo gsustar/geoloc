@@ -1,9 +1,12 @@
 import math
+import warnings
 import numpy as np
 
 from pyproj import CRS, Geod
 from shapely.geometry.polygon import Polygon
-from geoloc.utils import crs_transform
+
+import pyproj
+from sklearn.cluster import DBSCAN
 
 
 def distance_between_points(qry_point: tuple, ref_point: tuple, crs: str):
@@ -131,3 +134,25 @@ def average_precision(tp_flags):
             tp_cum += 1
             precisions.append(tp_cum / (i + 1))
     return float(np.mean(precisions))
+
+
+def clustering(coords, eps_values=(10, 20, 30, 50, 75, 100), min_samples=2):
+    coords = np.asarray(coords, dtype=float)
+    transformer = pyproj.Transformer.from_crs("epsg:4326", "epsg:3794", always_xy=True)
+    projected_coords = np.array(transformer.transform(coords[:, 1], coords[:, 0])).T
+
+    finite_mask = np.all(np.isfinite(projected_coords), axis=1)
+    projected_coords = projected_coords[finite_mask]
+    if len(projected_coords) <= 1:
+        return None
+
+    results = []
+    for eps in eps_values:
+        labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(projected_coords)
+        num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        rank1_label = labels[0]
+        num_el_main_cluster = 1 if rank1_label == -1 else int(np.sum(labels == rank1_label))
+        results.append(
+            dict(eps_m=eps, num_clusters=num_clusters, num_el_main_cluster=num_el_main_cluster)
+        )
+    return results

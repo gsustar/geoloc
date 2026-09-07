@@ -20,10 +20,10 @@ conda install -c conda-forge -c nvidia faiss-gpu=1.9.0
 ```
 ```bash
 cd geoloc/third_party/LoMa/
-pip install -e .
+pip install .
 
 cd geoloc/third_party/RoMa/
-pip install -e .
+pip install .
 
 cd geoloc
 pip install .

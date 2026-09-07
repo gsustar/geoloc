@@ -285,12 +285,145 @@ class Mast3rASMKVectorDatabase:
         self.asmk_dataset = self.asmk.add_ivf_builder(self.asmk_builder)
 
 
+class PytorchIndex:
+    def __init__(
+        self,
+        vdim: int,
+        distfn: str = "l2",
+        norm_vec: bool = True,
+        device: str = "cuda",
+        dtype: str = "float32",
+    ):
+        if distfn not in ("cosine", "l2"):
+            raise ValueError(f"Invalid distance function: {distfn}")
+        if dtype not in ("float32", "float16", "bfloat16"):
+            raise ValueError(f"Invalid dtype: {dtype}")
+
+        self.vdim = vdim
+        self.distfn = distfn
+        self.norm_vec = norm_vec
+        self.dtype = getattr(torch, dtype)
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+
+        # The index itself: (N, vdim) on self.device. Empty holds no storage.
+        self.vectors = torch.empty(0, vdim, device=self.device, dtype=self.dtype)
+        self.vdbdir = None
+
+        self.spatial_index = None
+        self.spatial_coords = None
+        self.spatial_crs = None
+
+    def size(self):
+        return self.vectors.shape[0]
+
+    def add(self, vectors: torch.Tensor):
+        if vectors.ndim == 1:
+            vectors = vectors.unsqueeze(0)
+        if vectors.ndim != 2 or vectors.shape[1] != self.vdim:
+            raise ValueError(
+                f"Expected vectors of shape (N, {self.vdim}), got {tuple(vectors.shape)}"
+            )
+        if self.norm_vec:
+            vectors = F.normalize(vectors)
+        vectors = vectors.to(self.device, self.dtype)
+        self.vectors = torch.cat((self.vectors, vectors), dim=0)
+
+    def set_spatial_index(self, coords: np.ndarray, crs: str = "EPSG:4326"):
+        coords = np.asarray(coords)
+        assert coords.ndim == 2 and coords.shape[1] == 2, "`coords` must have shape (N, 2) with [y, x] ordering"
+        assert coords.shape[0] == self.size(), (
+            f"Number of spatial coordinates ({coords.shape[0]}) must match DB size ({self.size()})"
+        )
+
+        self.spatial_coords = coords.astype(np.float64)
+        self.spatial_crs = crs
+
+        if crs == "EPSG:4326":
+            assert BallTree is not None, "BallTree is required for WGS84 radius search. Install scikit-learn."
+            coords_rad = np.radians(self.spatial_coords)
+            self.spatial_index = BallTree(coords_rad, metric="haversine")
+        else:
+            assert KDTree is not None, "KDTree is required for projected radius search. Install scipy."
+            self.spatial_index = KDTree(self.spatial_coords)
+
+    def _radius_filter_ids(self, query_y: float, query_x: float, radius_m: float):
+        assert self.spatial_index is not None, "Spatial index not initialized. Call `set_spatial_index(...)` first."
+        assert self.spatial_coords is not None, "Spatial coordinates not initialized."
+
+        if self.spatial_crs == "WGS84":
+            center_rad = np.radians([[query_y, query_x]])
+            radius_rad = radius_m / 6_371_000.0
+            ids = self.spatial_index.query_radius(center_rad, r=radius_rad)[0]
+        else:
+            ids = self.spatial_index.query_ball_point([query_y, query_x], r=radius_m)
+            ids = np.asarray(ids)
+
+        return ids.astype(np.int64)
+
+    def search_radius(self, qu: torch.Tensor, k: int, query_y: float, query_x: float, radius_m: float):
+        if qu.ndim == 1:
+            qu = qu.unsqueeze(0)
+
+        valid_ids = self._radius_filter_ids(query_y=query_y, query_x=query_x, radius_m=radius_m)
+        if len(valid_ids) == 0:
+            empty_d = np.empty((qu.shape[0], 0), dtype=np.float32)
+            empty_i = np.empty((qu.shape[0], 0), dtype=np.int64)
+            return empty_d, empty_i
+
+        ids = torch.from_numpy(valid_ids).to(self.device)
+        distances, indices = self._search(qu, k, self.vectors[ids])
+        return distances, valid_ids[indices]
+
+    def search(self, qu: torch.Tensor, k: int):
+        return self._search(qu, k, self.vectors)
+
+    def _search(self, qu: torch.Tensor, k: int, vectors: torch.Tensor):
+        if qu.ndim == 1:
+            qu = qu.unsqueeze(0)
+        if qu.ndim != 2 or qu.shape[1] != self.vdim:
+            raise ValueError(
+                f"Expected queries of shape (M, {self.vdim}), got {tuple(qu.shape)}"
+            )
+        if self.norm_vec:
+            qu = F.normalize(qu)
+        qu = qu.to(self.device, self.dtype)
+
+        k = min(k, vectors.shape[0])
+        if self.distfn == "cosine":
+            ip = vectors @ qu.T
+            distances, indices = ip.topk(k, dim=0)
+            distances, indices = distances.T, indices.T
+        else:
+            d = torch.cdist(qu, vectors)
+            distances, indices = d.topk(k, dim=1, largest=False)
+
+        return distances.float().contiguous().cpu().numpy(), indices.contiguous().cpu().numpy()
+
+    @torch.no_grad()
+    def build(self, ref_image_dataloader, model, device="cpu", verbose=True, **kwargs):
+        for i, ref in enumerate(tqdm(ref_image_dataloader, disable=not verbose)):
+            if DEBUG > 1 and i > 10:
+                break
+            image = ref["image"].to(device)
+            emb = model(image)["out"]
+            if self.norm_vec:
+                emb = F.normalize(emb)
+            self.add(emb)
+
+    def save(self, savedir: str):
+        self.vdbdir = savedir
+        os.makedirs(savedir, exist_ok=True)
+        torch.save(self.vectors.cpu(), os.path.join(savedir, "pytorch_index.index"))
+
+
 def load_database(loaddir: str, config):
     """Load a faiss index from a file."""
 
     def detect_db_type(config):
         if config.vdb.class_path.endswith("Mast3rASMKVectorDatabase"):
             return "asmk"
+        if config.vdb.class_path.endswith("PytorchIndex"):
+            return "pytorch"
         return "faiss"
 
     db_type = detect_db_type(config)
@@ -300,6 +433,12 @@ def load_database(loaddir: str, config):
 
     if db_type == "asmk":
         db.asmk_dataset = db.asmk.build_ivf(cache_path=db_index_path)
+    elif db_type == "pytorch":
+        vectors = torch.load(db_index_path, weights_only=True)
+        assert vectors.shape[1] == db.vdim, (
+            f"Saved index has vdim {vectors.shape[1]}, config says {db.vdim}"
+        )
+        db.vectors = vectors.to(db.device, db.dtype)
     else:
         cpu_index = faiss.read_index(db_index_path)
         if db.faiss_gpu:
@@ -308,3 +447,8 @@ def load_database(loaddir: str, config):
         else:
             db.faiss_index = cpu_index
     return db
+
+def convert_flat_index_to_pytorch(index_path: str, save_path: str):
+    index = faiss.read_index(index_path)
+    thindex = torch.from_numpy(index.reconstruct_n(0, index.ntotal))
+    torch.save(thindex, save_path)
