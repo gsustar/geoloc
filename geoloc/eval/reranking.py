@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 
 from geoloc.data.utils import collate_with_geometry
 
@@ -26,7 +25,6 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
     R = []
     tvec = []
     masks = []
-    # covs = []
     for kA, kB, dem, geom in zip(kptsA, kptsB, dems, geoms):
         valid_mask = (kA[:, 0] >= 0) & (kA[:, 1] >= 0) & (kB[:, 0] >= 0) & (kB[:, 1] >= 0)
         kA_f = kA[valid_mask]
@@ -34,8 +32,6 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
         R_i, tvec_i, mask_i = pnp_solver(kA_f.float(), kB_f.float(), K, dem, geom)
         R.append(R_i)
         tvec.append(tvec_i)
-        # covs.append(cov_i)
-        # scatter the inlier mask back to the original keypoint rows
         full_mask = torch.zeros((kA.shape[0], 1), dtype=torch.bool)
         full_mask[valid_mask] = mask_i.to(full_mask.device)
         masks.append(full_mask)
@@ -46,16 +42,14 @@ def estimate_pose_pnp(kptsA, kptsB, K, dems, geoms, pnp_solver):
         tvec = torch.stack(tvec, dim=0)
     if len(masks) > 0:
         masks = torch.stack(masks, dim=0)
-    return R, tvec, masks, num_inliers #, covs
+    return R, tvec, masks, num_inliers
 
 
 def rerank(
-    matcher, ransac, qry_image, ref_image_dataset, inds, ransac_mode="homography", K=None, dists=None, device=None, batch_size=1,
-    # bootstrap_ransac=None
+    matcher, ransac, qry_image, ref_image_dataset, inds, 
+    ransac_mode="homography", K=None, dists=None, device=None, batch_size=1,
 ):
     assert matcher is not None, "Matcher model must be provided"
-    # if isinstance(inds, np.ndarray):
-    #     inds = torch.from_numpy(inds)
     if dists is None:
         dists = torch.ones_like(inds).float() * -1.0
 
@@ -78,12 +72,6 @@ def rerank(
     all_kptsA = []
     all_kptsB = []
     all_masks = []
-    # # bootstrap only ever needs the single highest-inlier candidate's DEM/geometry,
-    # # so track that running best instead of holding every candidate's DEM tile
-    # # in memory
-    # best_dem = None
-    # best_geom = None
-    # best_num_inliers = -1
     for batch in dataloader:
         ref_batch = batch["image"].to(device)
         qry_batch = qry_image.expand(ref_batch.shape[0], -1, -1, -1)
@@ -96,16 +84,6 @@ def rerank(
             Rs, tvecs, masks, num_inliers = estimate_pose_pnp(kptsA, kptsB, K, batch["dem"], batch["geometry"], ransac)
             all_Rs.append(Rs)
             all_tvecs.append(tvecs)
-            # all_covs.extend(covs)
-            # if bootstrap_ransac is not None:
-            #     batch_best_idx = int(torch.argmax(num_inliers).item())
-            #     batch_best_ninl = int(num_inliers[batch_best_idx].item())
-            #     if batch_best_ninl > best_num_inliers:
-            #         best_num_inliers = batch_best_ninl
-            #         # .clone(): batch["dem"] is a stacked tensor, so an unclonded
-            #         # slice would keep the whole batch's underlying storage alive
-            #         best_dem = batch["dem"][batch_best_idx].clone()
-            #         best_geom = batch["geometry"][batch_best_idx]
         else:
             raise ValueError(f"Invalid ransac_mode: {ransac_mode}")
         
@@ -140,16 +118,6 @@ def rerank(
     elif ransac_mode == "pnp":
         all_Rs = all_Rs[sorted_order]
         all_tvecs = all_tvecs[sorted_order]
-        # all_covs = [all_covs[j] for j in sorted_order]
-
-    # # bootstrap-based pose variance is only ever estimated for the winning
-    # # (highest-inlier) candidate, not every candidate that went through PnP
-    # bootstrap_pose_var = None
-    # if ransac_mode == "pnp" and bootstrap_ransac is not None and best_dem is not None:
-    #     print(f"RANSAC mode: {ransac_mode}, bootstrap_ransac: {bootstrap_ransac}, best_dem: {best_dem is not None}")
-    #     _, _, _, bootstrap_pose_var = bootstrap_ransac(
-    #         all_kptsA[0], all_kptsB[0], K, best_dem, best_geom
-    #     )
 
     return dict(
         inds=inds,
@@ -158,8 +126,6 @@ def rerank(
         all_homographies=all_homographies.tolist() if ransac_mode == "homography" else None,
         all_Rs=all_Rs.tolist() if ransac_mode == "pnp" else None,
         all_tvecs=all_tvecs.tolist() if ransac_mode == "pnp" else None,
-        # all_pose_covs=all_covs if ransac_mode == "pnp" else None,
-        # bootstrap_pose_var=bootstrap_pose_var,
         all_num_outliers=all_num_outliers.tolist(),
         qry_kpts=all_kptsA.tolist(),
         ref_kpts=all_kptsB.tolist(),

@@ -91,6 +91,8 @@ class LoMaMatcher(torch.nn.Module):
         super().__init__()
         if name == "loma_R":
             cfg = LoMaR(compile=do_compile)
+        elif name == "loma_R_raco":
+            cfg = LoMaR(compile=do_compile, detector="raco")
         else:
             cfg = LoMaB(compile=do_compile)
         self.matcher = LoMa(cfg)

@@ -77,7 +77,9 @@ class PnPSolver:
         matchedB_world = np.zeros((matchedB.shape[0], 3), dtype=np.float64)
         matchedB_world[:, 0] = matchedB[:, 0] / rw * (maxx - minx) + minx
         matchedB_world[:, 1] = (1 - matchedB[:, 1] / rh) * (maxy - miny) + miny
-        matchedB_world[:, 2] = dem[matchedB[:, 1].astype(int), matchedB[:, 0].astype(int)]
+        row_idx = np.clip(matchedB[:, 1].astype(int), 0, rh - 1)
+        col_idx = np.clip(matchedB[:, 0].astype(int), 0, rw - 1)
+        matchedB_world[:, 2] = dem[row_idx, col_idx]
 
         # Solve in a world frame centered on the object points: with absolute
         # georeferenced coordinates the LM refinement normal equations are

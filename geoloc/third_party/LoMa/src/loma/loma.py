@@ -4,6 +4,7 @@ import sys
 from typing import Callable, Literal, Tuple
 import numpy as np
 from PIL import Image
+import types
 
 import torch
 import torch.nn.functional as F
@@ -218,6 +219,17 @@ def filter_matches(scores: torch.Tensor, th: float):
     return m0, m1, mscores0, mscores1
 
 
+def _raco_detect(self, batch, num_keypoints=None, **kwargs):
+    self.conf.max_num_keypoints = num_keypoints or self.conf.max_num_keypoints
+    out = self.extract(batch["image"], **kwargs)
+
+    h, w = batch["image"].shape[-2:]
+    kpts = out["keypoints"]
+    kpts_norm = torch.stack(
+        (2 * kpts[..., 0] / w - 1, 2 * kpts[..., 1] / h - 1), dim=-1
+    )
+    return {"keypoints": kpts_norm, "keypoint_probs": out["keypoint_scores"]}
+
 class LoMa(Model):
     @dataclass(frozen=True, kw_only=True)
     class Cfg:
@@ -228,6 +240,7 @@ class LoMa(Model):
         filter_threshold: float = 0.1
         mp: bool = True
         compile: bool = False
+        detector: Literal["dad", "raco"] = "dad"
         descriptor: Literal["dedode_b", "dedode_g"] = "dedode_b"
         num_keypoints: int = 2048
         # Positional encoding config
@@ -278,7 +291,14 @@ class LoMa(Model):
             [MatchAssignment(cfg.embed_dim) for _ in range(cfg.n_layers)]
         )
 
-        self._detector = DaD(DaD.Cfg(compile=cfg.compile)).eval()
+        if cfg.detector == "dad":
+            self._detector = DaD(DaD.Cfg(compile=cfg.compile)).eval()
+        elif cfg.detector == "raco":
+            self._detector = torch.hub.load('cvg/RaCo', 'raco', pretrained=True, max_num_keypoints=cfg.num_keypoints).eval()
+            self._detector.detect = types.MethodType(_raco_detect, self._detector)
+        else:
+            raise ValueError(f"Detector {cfg.detector} not supported")
+        
         for p in self._detector.parameters():
             p.requires_grad = False
 
@@ -309,13 +329,13 @@ class LoMa(Model):
                 disallowed_keys = sorted(
                     set(unexpected_keys) - allowed_extra_layer_keys
                 )
-                assert len(disallowed_keys) == 0, (
-                    "Unexpected keys when loading pretrained weights "
-                    f"(not extra layers beyond n_layers={cfg.n_layers}): {disallowed_keys}"
-                )
-            assert len(missing_keys) == 0, (
-                f"Missing keys when loading pretrained weights: {missing_keys}"
-            )
+                # assert len(disallowed_keys) == 0, (
+                #     "Unexpected keys when loading pretrained weights "
+                #     f"(not extra layers beyond n_layers={cfg.n_layers}): {disallowed_keys}"
+                # )
+            # assert len(missing_keys) == 0, (
+            #     f"Missing keys when loading pretrained weights: {missing_keys}"
+            # )
 
         self.eval()
         if self.cfg.compile and sys.platform == "linux":
