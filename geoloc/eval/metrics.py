@@ -139,16 +139,15 @@ def average_precision(tp_flags):
 def clustering(coords, eps_values=(10, 20, 30, 50, 75, 100), min_samples=2):
     coords = np.asarray(coords, dtype=float)
     transformer = pyproj.Transformer.from_crs("epsg:4326", "epsg:3794", always_xy=True)
-    projected_coords = np.array(transformer.transform(coords[:, 1], coords[:, 0])).T
-
-    finite_mask = np.all(np.isfinite(projected_coords), axis=1)
-    projected_coords = projected_coords[finite_mask]
-    if len(projected_coords) <= 1:
+    coords = np.array(transformer.transform(coords[:, 1], coords[:, 0])).T
+    finite_mask = np.all(np.isfinite(coords), axis=1)
+    coords = coords[finite_mask]
+    if len(coords) <= 1:
         return None
 
     results = []
     for eps in eps_values:
-        labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(projected_coords)
+        labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(coords)
         num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         rank1_label = labels[0]
         num_el_main_cluster = 1 if rank1_label == -1 else int(np.sum(labels == rank1_label))
