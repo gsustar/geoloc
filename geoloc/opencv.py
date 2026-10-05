@@ -3,6 +3,19 @@ import torch
 import numpy as np
 
 
+def refine_pose_lm(object_points, image_points, K, rvec, tvec):
+    # Refine a PnP solution with Levenberg-Marquardt nonlinear optimization.
+    obj = np.ascontiguousarray(object_points, dtype=np.float64).reshape(-1, 3)
+    img = np.ascontiguousarray(image_points, dtype=np.float64).reshape(-1, 2)
+    K = np.ascontiguousarray(K, dtype=np.float64)
+    rvec = np.ascontiguousarray(rvec, dtype=np.float64).reshape(3, 1)
+    tvec = np.ascontiguousarray(tvec, dtype=np.float64).reshape(3, 1)
+    try:
+        rvec, tvec = cv2.solvePnPRefineLM(obj, img, K, None, rvec, tvec)
+    except cv2.error:
+        pass
+    return rvec, tvec
+
 class HomographyEstimator:
     def __init__(self, reproj_threshold=1.0, maxIters=10000):
         self._find_homography = (lambda kptA, kptB:
@@ -91,6 +104,9 @@ class PnPSolver:
         if rvec is not None and tvec is not None and inliers is not None and success:
             # solvePnPRansac returns inlier INDICES, not a boolean mask
             inlier_idx = np.asarray(inliers, dtype=np.int64).reshape(-1)
+            if inlier_idx.shape[0] >= 4:
+                # rvec, tvec = refine_pose_lm(object_points, image_points, K, rvec, tvec)
+                rvec, tvec = refine_pose_lm(object_points[inlier_idx], image_points[inlier_idx], K, rvec, tvec)
             R, _ = cv2.Rodrigues(rvec)
             # undo the centering: t_world = t_centered - R m
             tvec = np.asarray(tvec, dtype=np.float64).reshape(3, 1) - R @ centroid.reshape(3, 1)
